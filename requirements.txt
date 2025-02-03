@@ -1,0 +1,30 @@
+# Форматирование и линтинг
+black==25.1.0
+isort==6.0.0
+flake8==7.1.1
+flake8-docstrings==1.7.0
+flake8-bugbear==24.2.6
+flake8-comprehensions==3.14.0
+mypy==1.14.1
+bandit==1.7.6
+
+# Типы для mypy
+typing_extensions==4.12.2
+mypy-extensions==1.0.0
+types-setuptools==69.1.0.20240310
+
+# Pre-commit
+pre-commit==4.1.0
+
+# Дополнительные зависимости
+click==8.1.8
+mccabe==0.7.0
+packaging==24.2
+pathspec==0.12.1
+platformdirs==4.3.6
+pycodestyle==2.12.1
+pyflakes==3.2.0
+
+# Зависимости для разработки
+pytest==8.0.2  # Для тестирования
+pytest-cov==4.1.0  # Для измерения покрытия кода тестами

@@ -1,0 +1,33 @@
+{
+    // Путь к виртуальному окружению
+    "python.defaultInterpreterPath": "${workspaceFolder}/.venv",
+
+    // Дополнительные пути для анализа кода
+    "python.analysis.extraPaths": ["${workspaceFolder}"],
+
+    // Автоактивация виртуального окружения
+    "python.terminal.activateEnvironment": true,
+
+    // Настройки Python
+    "[python]": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "ms-python.black-formatter"
+    },
+
+    // Настройки форматирования
+    "black-formatter.args": ["--line-length", "88"],
+    "isort.args": ["--profile", "black"],
+
+    // Настройки линтера
+    "flake8.args": [
+        "--max-line-length=88",
+        "--extend-ignore=E203",
+        "--docstring-convention=google"
+    ],
+
+    // Настройки типизации
+    "mypy-type-checker.args": [
+        "--disallow-untyped-defs",
+        "--ignore-missing-imports"
+    ]
+}

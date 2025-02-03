@@ -1,0 +1,62 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info
+*.egg
+.python-version
+pip-selfcheck.json
+.pytest_cache/
+venv/
+env/
+.venv
+
+
+# Environment
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Build
+dist/
+build/
+*.mo
+*.pot
+
+# Database
+*.db
+*.sqlite
+*.sql
+*.dump
+
+# Logs and temp files
+*.log
+*.tmp
+*.swp
+*.swo
+
+# OS generated
+Thumbs.db
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+[Tt]humbs.db
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+test-reports/
+
+# IDE (other than VS Code)
+.idea/
+*.iml
+
+# VS Code
+# .vscode/*

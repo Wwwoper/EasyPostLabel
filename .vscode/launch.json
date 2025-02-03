@@ -1,0 +1,13 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Run pre-commit",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "pre_commit",
+            "args": ["run", "--all-files"],
+            "justMyCode": false
+        }
+    ]
+}
