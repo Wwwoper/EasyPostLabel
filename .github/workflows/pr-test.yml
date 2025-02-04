@@ -44,7 +44,6 @@ jobs:
       env:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
-    - name: Check pre-commit hooks
+    - name: Run pre-commit hooks
       run: |
-        pre-commit install
         pre-commit run --all-files
