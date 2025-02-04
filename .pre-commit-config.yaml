@@ -40,9 +40,8 @@ repos:
     -   id: mypy
         additional_dependencies:
             - types-openpyxl
-            - types-pandas
-            - types-PyYAML
             - pandas-stubs
+            - types-PyYAML
 
 # bandit - анализатор безопасности кода
 -   repo: https://github.com/PyCQA/bandit
