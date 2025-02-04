@@ -17,17 +17,22 @@ def get_client_full_name(row: dict[str, Any], receiver_type_field: str) -> str:
     Returns:
         str: Полное имя клиента
     """
+    # Получаем значение типа получателя из строки
+    receiver_type = row.get(receiver_type_field)
+
+    # Если тип получателя не указан, используем значение как тип
+    if receiver_type is None:
+        receiver_type = receiver_type_field
+
     # Проверяем, что тип получателя валидный
-    if receiver_type_field not in [rt.value for rt in ReceiverType]:
-        raise ValueError(f"Неизвестный тип получателя: {receiver_type_field}")
+    if receiver_type not in [rt.value for rt in ReceiverType]:
+        raise ValueError(f"Неизвестный тип получателя: {receiver_type}")
 
-    config = ConfigManager()
-    fields = config.get_receiver_fields(receiver_type_field)
-
-    surname = row[fields["surname_field"]].strip()
-    name = row[fields["name_field"]].strip()
-
-    return f"{surname} {name}"
+    # Возвращаем полное имя в зависимости от типа получателя
+    if receiver_type == ReceiverType.SELF.value:
+        return f"{row['Фамилия']} {row['Имя']}"
+    else:
+        return f"{row['Фамилия получателя заказа']} {row['Имя получателя заказа']}"
 
 
 def read_excel_file(file_path: str, config: ConfigManager) -> pd.DataFrame:
