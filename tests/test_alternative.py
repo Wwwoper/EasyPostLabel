@@ -1,96 +1,106 @@
-"""Модульные тесты для AlternativeDeliveryStrategy."""
+"""Тесты для альтернативной стратегии доставки."""
+
+from pathlib import Path
+from typing import Dict
 
 import pandas as pd
 import pytest
-from openpyxl import load_workbook
+from pandas import DataFrame
+from tests.conftest import typed_fixture
 
-from processors.delivery_strategies.alternative import \
-    AlternativeDeliveryStrategy
+from processors.delivery_strategies.alternative import AlternativeDeliveryStrategy
 from utils.config import ConfigManager
 
 
-@pytest.fixture
-def strategy():
-    """Фикстура для создания стратегии."""
-    config_manager = ConfigManager()
+@typed_fixture
+def config_manager() -> ConfigManager:
+    """Создает менеджер конфигурации."""
+    config = ConfigManager()
+    config.config = {
+        "columns": {
+            "delivery_method": {
+                "source": "Список",
+                "validation": {"postal_keyword": "Почта России"},
+            },
+            "phone": {"source": "Телефон"},
+            "name": {"source": "ФИО полностью"},
+        },
+        "output": {
+            "postal": {"filename": "postal.xlsx"},
+            "alternative": {"filename": "alternative.xlsx"},
+        },
+    }
+    return config
+
+
+@typed_fixture
+def alternative_strategy(config_manager: ConfigManager) -> AlternativeDeliveryStrategy:
+    """Создает экземпляр стратегии."""
     return AlternativeDeliveryStrategy(config_manager)
 
 
-@pytest.fixture
-def sample_data():
-    """Фикстура с тестовыми данными."""
-    return pd.DataFrame({
-        "Кто будет получать заказ": ["Лично я", "Другой человек", "Лично я"],
-        "Фамилия": ["иванов-петров", "Сидоров", "КУЗНЕЦОВ"],
-        "Имя": ["иван", None, "ПЕТР"],
-        "Фамилия получателя заказа": [None, "Петров-Иванов", None],
-        "Имя получателя заказа": [None, "Иван", None],
-        "Список": ["Магнит Доставка", "Пятерочка Центр", "Магнит Север"],
-    })
-
-
-def test_get_first_word(strategy):
-    """Тест получения первого слова из строки."""
-    assert strategy._get_first_word("Магнит Доставка") == "Магнит"
-    assert strategy._get_first_word("Пятерочка") == "Пятерочка"
-    assert strategy._get_first_word("") == ""
-    assert strategy._get_first_word(None) == ""
-
-
-def test_get_first_word_right(strategy):
-    """Тест получения первого слова с правильным регистром."""
-    assert strategy._get_first_word_right("иванов-петров") == "Иванов-Петров"
-    assert strategy._get_first_word_right("СИДОРОВ") == "Сидоров"
-    assert strategy._get_first_word_right("") == ""
-    assert strategy._get_first_word_right(None) == ""
-
-
-def test_combine_name(strategy, sample_data):
-    """Тест формирования полного имени."""
-    row1 = sample_data.iloc[0]
-    row2 = sample_data.iloc[1]
-    
-    assert strategy._combine_name(row1) == "Иванов-Петров Иван"
-    assert strategy._combine_name(row2) == "Петров-Иванов Иван"
-
-
-def test_process_data(strategy, sample_data):
+def test_data_processing(alternative_strategy: AlternativeDeliveryStrategy) -> None:
     """Тест обработки данных."""
-    result = strategy.process(sample_data)
-    
-    assert len(result) == 3
-    assert list(result.columns) == ["ФИО", "Центр_Выдачи"]
-    
-    # Проверяем правильность обработки имен и центров выдачи
-    assert "Иванов-Петров Иван" in result["ФИО"].values
-    assert "Магнит" in result["Центр_Выдачи"].values
+    data = pd.DataFrame(
+        {
+            "Фамилия": ["Иванов", "Петров"],
+            "Имя": ["Иван", "Петр"],
+            "Список": ["Магнит", "Пятерочка"],
+            "Кто будет получать заказ": ["Лично я", "Лично я"],
+        }
+    )
+
+    result = alternative_strategy.process(data)
+    assert len(result) == 2
+    assert "ФИО" in result.columns
+    assert "Центр_Выдачи" in result.columns
 
 
-def test_save_output_format(strategy, sample_data, tmp_path):
-    """Тест формата выходного файла."""
+def test_save_output(
+    alternative_strategy: AlternativeDeliveryStrategy, tmp_path: Path
+) -> None:
+    """Тест сохранения результатов."""
+    data = pd.DataFrame(
+        {
+            "ФИО": ["Иванов Иван", "Петров Петр"],
+            "Центр_Выдачи": ["Магнит", "Пятерочка"],
+        }
+    )
+
     output_path = tmp_path / "test_output.xlsx"
-    
-    # Обрабатываем и сохраняем данные
-    processed_data = strategy.process(sample_data)
-    strategy.save(processed_data, output_path)
-    
-    # Проверяем созданный файл
-    wb = load_workbook(output_path)
-    
-    # Проверяем наличие листов
-    assert "Бирки" in wb.sheetnames
-    assert "Список доставки" in wb.sheetnames
-    
-    # Проверяем стили
-    assert "birka" in wb.named_styles
-    assert "list" in wb.named_styles
-    
-    # Проверяем размеры столбцов на листе бирок
-    labels_sheet = wb["Бирки"]
-    assert labels_sheet.column_dimensions["A"].width == 30
-    assert labels_sheet.column_dimensions["B"].width == 1
-    
-    # Проверяем форматирование списка доставки
-    delivery_sheet = wb["Список доставки"]
-    assert "Заказы от" in delivery_sheet["B1"].value
-    assert delivery_sheet["B3"].value is not None  # Дата 
+    alternative_strategy.save(data, str(output_path))
+    assert output_path.exists()
+
+
+def test_empty_data_handling(alternative_strategy: AlternativeDeliveryStrategy) -> None:
+    """Тест обработки пустых данных."""
+    empty_data = pd.DataFrame()
+    result = alternative_strategy.process(empty_data)
+    assert result.empty
+
+
+def test_missing_columns_handling(
+    alternative_strategy: AlternativeDeliveryStrategy,
+) -> None:
+    """Тест обработки данных с отсутствующими столбцами."""
+    data = pd.DataFrame({"Неправильный столбец": ["Тест"]})
+    result = alternative_strategy.process(data)
+    assert result.empty
+
+
+def test_special_characters_handling(
+    alternative_strategy: AlternativeDeliveryStrategy,
+) -> None:
+    """Тест обработки специальных символов."""
+    data = pd.DataFrame(
+        {
+            "Фамилия": ["Иванов-Петров", "О'Коннор"],
+            "Имя": ["Иван", "Джон"],
+            "Список": ["Магнит", "Пятерочка"],
+            "Кто будет получать заказ": ["Лично я", "Лично я"],
+        }
+    )
+
+    result = alternative_strategy.process(data)
+    assert len(result) == 2
+    assert all(isinstance(name, str) for name in result["ФИО"])

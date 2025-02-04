@@ -3,7 +3,6 @@
 import re
 
 import pandas as pd
-from tabulate import tabulate
 
 from processors.delivery_strategies.base import DeliveryStrategy
 
@@ -131,10 +130,6 @@ class PostalDeliveryStrategy(DeliveryStrategy):
                 "4",  # mail_type
             ]
             postal_table_data.append(row)
-
-        # Выводим таблицу в консоль
-        print("\nТаблица для почтовой рассылки:")
-        print(tabulate(postal_table_data, headers=headers, tablefmt="grid"))
 
         # Создаем DataFrame для сохранения
         df_postal = pd.DataFrame(postal_table_data, columns=headers)

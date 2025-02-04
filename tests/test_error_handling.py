@@ -31,9 +31,7 @@ def sample_data() -> pd.DataFrame:
     )
 
 
-def test_file_permission_error(
-    sample_data: pd.DataFrame, tmp_path: Path
-) -> None:
+def test_file_permission_error(sample_data: pd.DataFrame, tmp_path: Path) -> None:
     """Тест обработки ошибки доступа к файлу."""
     config = ConfigManager()
     config.config["output"] = {
@@ -115,4 +113,4 @@ def test_memory_error_handling(config_manager: ConfigManager) -> None:
     with patch("pandas.DataFrame.copy", side_effect=MemoryError("Out of memory")):
         processor = DeliveryProcessor(data, config_manager)
         with pytest.raises(MemoryError, match="Out of memory"):
-            processor.process() 
+            processor.process()

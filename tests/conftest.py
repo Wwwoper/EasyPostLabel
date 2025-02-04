@@ -1,17 +1,8 @@
 """Общие фикстуры для тестов."""
 
-import os
-import sys
-from pathlib import Path
-from typing import Callable, TypeVar
+from typing import Any, Callable, TypeVar
 
 import pytest
-
-# Добавляем src директорию в PYTHONPATH
-project_root = Path(__file__).parent
-src_path = project_root / "src"
-if str(src_path) not in sys.path:
-    sys.path.insert(0, str(src_path))
 
 T = TypeVar("T")
 

@@ -188,6 +188,11 @@ class AlternativeDeliveryStrategy(DeliveryStrategy):
         if data.empty:
             return pd.DataFrame()
 
+        # Проверяем наличие необходимых столбцов
+        required_columns = ["Список"]  # Можно добавить другие необходимые столбцы
+        if not all(col in data.columns for col in required_columns):
+            return pd.DataFrame()
+
         processed_data = data.copy()
         processed_data["ФИО"] = processed_data.apply(self._combine_name, axis=1)
         processed_data["Центр_Выдачи"] = processed_data["Список"].apply(
