@@ -1,10 +1,9 @@
-"""Модульные тесты для AlternativeDeliveryStrategy."""
-
-from pathlib import Path
+"""Тесты для альтернативной стратегии доставки."""
 
 import pandas as pd
 import pytest
-from openpyxl import load_workbook
+from pathlib import Path
+from typing import Dict, Optional
 
 from processors.delivery_strategies.alternative import AlternativeDeliveryStrategy
 from utils.config import ConfigManager

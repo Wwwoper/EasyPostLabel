@@ -1,10 +1,9 @@
 """Тесты для утилит."""
 
-from pathlib import Path
-from typing import Dict, Optional
-
 import pandas as pd
 import pytest
+from pathlib import Path
+from typing import Dict, Optional
 
 from utils.config import ConfigManager
 from utils.utils import get_client_full_name, process_dataframe, read_excel_file
