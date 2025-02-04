@@ -14,54 +14,35 @@ repos:
 
 # Black - форматтер кода Python
 -   repo: https://github.com/psf/black
-    rev: 23.12.1
+    rev: 24.1.1
     hooks:
     -   id: black
-        # Исключаем папки с автогенерируемым кодом и виртуальным окружением
-        exclude: ^(migrations/|.venv/|venv/)
-        args: [--line-length=88]  # Максимальная длина строки - 88 символов
+        language_version: python3.11
 
 # isort - сортировщик импортов
 -   repo: https://github.com/pycqa/isort
     rev: 5.13.2
     hooks:
     -   id: isort
-        exclude: ^(migrations/|.venv/|venv/)
-        # Настройки совместимости с black и длины строки
-        args: [--profile=black, --line-length=88]
+        args: ["--profile", "black"]
 
 # flake8 - линтер для проверки стиля кода
 -   repo: https://github.com/pycqa/flake8
     rev: 7.0.0
     hooks:
     -   id: flake8
-        exclude: ^(migrations/|.venv/|venv/)
-        # Дополнительные плагины для расширения проверок
-        additional_dependencies:
-            - flake8-docstrings    # Проверка документации
-            - flake8-bugbear       # Поиск потенциальных ошибок
-            - flake8-comprehensions # Улучшение читаемости list/dict comprehensions
-        args: [
-            --max-line-length=88,  # Максимальная длина строки
-            --extend-ignore=E203   # Игнорируем конфликты с black
-        ]
+        additional_dependencies: [flake8-docstrings]
 
 # mypy - статический анализатор типов
 -   repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.8.0
     hooks:
     -   id: mypy
-        exclude: ^(migrations/|.venv/|venv/)
-        additional_dependencies:
-            - types-setuptools
-            - pytest
-            - mypy-extensions
-            - typing-extensions
+        additional_dependencies: [types-all]
 
 # bandit - анализатор безопасности кода
 -   repo: https://github.com/PyCQA/bandit
-    rev: 1.7.6
+    rev: 1.7.7
     hooks:
     -   id: bandit
-        exclude: ^(migrations/|.venv/|venv/|tests/)
-        args: ["-ll", "-s", "B311"]  # -ll для low level, -s B311 для пропуска проверки random
+        args: ["-c", "pyproject.toml"]
