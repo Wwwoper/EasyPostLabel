@@ -1,5 +1,7 @@
 """Интеграционные тесты для альтернативной доставки."""
 
+from pathlib import Path
+
 import pandas as pd
 import pytest
 
@@ -8,7 +10,7 @@ from utils.config import ConfigManager
 
 
 @pytest.fixture
-def input_data():
+def input_data() -> pd.DataFrame:
     """Фикстура с входными данными."""
     return pd.DataFrame(
         {
@@ -22,7 +24,7 @@ def input_data():
     )
 
 
-def test_end_to_end_processing(input_data, tmp_path):
+def test_end_to_end_processing(input_data: pd.DataFrame, tmp_path: Path) -> None:
     """Тест полного цикла обработки данных."""
     # Инициализация
     config = ConfigManager()
@@ -51,7 +53,7 @@ def test_end_to_end_processing(input_data, tmp_path):
             output_path,
             sheet_name="Список доставки",
             skiprows=3,  # Пропускаем заголовок и пустую строку
-            usecols=[1, 2]  # Читаем только столбцы с ФИО и центром выдачи
+            usecols=[1, 2],  # Читаем только столбцы с ФИО и центром выдачи
         )
         assert len(result_df) > 0
 
@@ -61,25 +63,28 @@ def test_end_to_end_processing(input_data, tmp_path):
             if pd.isna(name):  # Пропускаем пустые значения
                 continue
             parts = str(name).split()
-            assert all(part[0].isupper() and part[1:].islower() for part in parts), \
-                f"Неправильный формат имени: {name}"
+            assert all(
+                part[0].isupper() and part[1:].islower() for part in parts
+            ), f"Неправильный формат имени: {name}"
 
         # Проверяем формат центра выдачи
         for center in result_df.iloc[:, 1]:
             if pd.isna(center):  # Пропускаем пустые значения
                 continue
             center_str = str(center)
-            assert center_str.startswith("в ЦВ"), \
-                f"Центр выдачи должен начинаться с 'в ЦВ': {center_str}"
+            assert center_str.startswith(
+                "в ЦВ"
+            ), f"Центр выдачи должен начинаться с 'в ЦВ': {center_str}"
             center_name = center_str.split()[-1]
-            assert center_name[0].isupper() and center_name[1:].islower(), \
-                f"Название центра должно быть с заглавной буквы: {center_name}"
+            assert (
+                center_name[0].isupper() and center_name[1:].islower()
+            ), f"Название центра должно быть с заглавной буквы: {center_name}"
 
     finally:
         dp.DEFAULT_OUTPUT_DIR = original_dir
 
 
-def test_duplicate_handling(input_data, tmp_path):
+def test_duplicate_handling(input_data: pd.DataFrame, tmp_path: Path) -> None:
     """Тест обработки дубликатов."""
     # Добавляем дубликат
     duplicate_data = pd.concat([input_data, input_data.iloc[[0]]])
@@ -94,7 +99,7 @@ def test_duplicate_handling(input_data, tmp_path):
     )
 
 
-def test_sorting_order(input_data, tmp_path):
+def test_sorting_order(input_data: pd.DataFrame, tmp_path: Path) -> None:
     """Тест порядка сортировки в выходном файле."""
     config = ConfigManager()
     config.config["output"]["alternative"]["filename"] = "test_sort.xlsx"
@@ -127,7 +132,7 @@ def test_sorting_order(input_data, tmp_path):
         dp.DEFAULT_OUTPUT_DIR = original_dir
 
 
-def test_name_formatting(input_data):
+def test_name_formatting(input_data: pd.DataFrame) -> None:
     """Тест форматирования имен."""
     config = ConfigManager()
     processor = DeliveryProcessor(input_data, config)
