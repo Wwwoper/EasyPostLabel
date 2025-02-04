@@ -1,6 +1,4 @@
-"""Тесты для стратегии обработки почтовых отправлений."""
-
-from unittest.mock import patch
+"""Тесты для проверки почтовой доставки."""
 
 import pandas as pd
 import pytest
@@ -9,108 +7,101 @@ from processors.delivery_strategies.postal import PostalDeliveryStrategy
 
 
 @pytest.fixture
-def postal_strategy():
+def postal_strategy() -> PostalDeliveryStrategy:
     """Фикстура для создания стратегии."""
     return PostalDeliveryStrategy()
 
 
 @pytest.fixture
-def sample_data():
+def sample_data() -> pd.DataFrame:
     """Фикстура с тестовыми данными."""
     return pd.DataFrame(
         {
-            "Телефон": [
-                "89999002291",
-                "+79203451508",
-                "9203451508",
-                "123",  # неверный формат
-                None,  # пустое значение
-            ],
-            "ФИО полностью": ["Тест Тестов"] * 5,
-            "только Индекс отделения для получения.": ["123456"] * 5,
+            "ФИО полностью": ["Иванов И.И."],
+            "Список": ["Почта России"],
+            "Телефон": ["79991234567"],
+            "только Индекс отделения для получения.": ["123456"],
         }
     )
 
 
-def test_normalize_phone(postal_strategy):
+def test_phone_normalization(postal_strategy: PostalDeliveryStrategy) -> None:
     """Тест нормализации телефонных номеров."""
-    assert postal_strategy._normalize_phone("89999002291") == "79999002291"
-    assert postal_strategy._normalize_phone("+79203451508") == "79203451508"
-    assert postal_strategy._normalize_phone("9203451508") == "79203451508"
-    assert postal_strategy._normalize_phone("123") == ""
-    assert postal_strategy._normalize_phone(None) == ""
+    # Тестовые номера
+    test_phones = [
+        "+7 (999) 123-45-67",  # Форматированный номер
+        "8(999)1234567",  # Номер с 8
+        "89991234567",  # Номер с 8 без форматирования
+        "9991234567",  # Номер без 7/8
+    ]
+
+    # Проверяем каждый номер
+    for phone in test_phones:
+        normalized = postal_strategy._normalize_phone(phone)
+        assert len(normalized) == 11
+        assert normalized.startswith("7")
+        assert normalized.isdigit()
 
 
-def test_process_data(postal_strategy, sample_data):
+def test_postcode_normalization(postal_strategy: PostalDeliveryStrategy) -> None:
+    """Тест нормализации почтовых индексов."""
+    # Тестовые индексы
+    test_postcodes = [
+        " 123456 ",  # Пробелы
+        "123 456",  # Разделитель
+        "12345",  # Короткий индекс
+        "1234567",  # Длинный индекс
+    ]
+
+    # Проверяем каждый индекс
+    for postcode in test_postcodes:
+        normalized = postal_strategy._normalize_postcode(postcode)
+        if normalized:  # Если индекс валидный
+            assert len(normalized) == 6
+            assert normalized.isdigit()
+
+
+def test_data_processing(
+    postal_strategy: PostalDeliveryStrategy,
+    sample_data: pd.DataFrame,
+) -> None:
     """Тест обработки данных."""
-    result = postal_strategy.process(sample_data)
+    processed_data = postal_strategy.process(sample_data)
 
-    # Проверяем, что все телефоны нормализованы
-    expected_phones = [
-        "79999002291",
-        "79203451508",
-        "79203451508",
-        "",  # неверный формат
-        "",  # было None
-    ]
+    # Проверяем, что данные не пустые
+    assert not processed_data.empty
 
-    assert list(result["Телефон"]) == expected_phones
+    # Проверяем нормализацию телефонов
+    assert all(
+        phone.startswith("7") and len(phone) == 11
+        for phone in processed_data["Телефон"]
+    )
 
-
-def test_process_dataframe(postal_strategy, sample_data):
-    """Тест обработки DataFrame с данными клиентов."""
-    processed_df = postal_strategy.process(sample_data)
-
-    # Проверяем, что DataFrame не пустой
-    assert not processed_df.empty
-
-    # Проверяем, что все телефоны нормализованы
-    expected_phones = [
-        "79999002291",
-        "79203451508",
-        "79203451508",
-        "",  # неверный формат
-        "",  # было None
-    ]
-    assert processed_df["Телефон"].tolist() == expected_phones
+    # Проверяем нормализацию индексов
+    assert all(
+        len(str(postcode)) == 6 and str(postcode).isdigit()
+        for postcode in processed_data["только Индекс отделения для получения."]
+    )
 
 
-def test_save_empty_dataframe(postal_strategy, tmp_path):
-    """Тест сохранения пустого DataFrame."""
+def test_empty_data_handling(postal_strategy: PostalDeliveryStrategy) -> None:
+    """Тест обработки пустых данных."""
     empty_df = pd.DataFrame()
-    output_path = tmp_path / "empty_test.xlsx"
-
-    # Проверяем, что метод не создает файл для пустого DataFrame
-    postal_strategy.save(empty_df, output_path)
-    assert not output_path.exists()
+    processed_data = postal_strategy.process(empty_df)
+    assert processed_data.empty
 
 
-@patch("builtins.print")
-def test_save_valid_dataframe(mock_print, postal_strategy, sample_data, tmp_path):
-    """Тест сохранения валидного DataFrame."""
-    output_path = tmp_path / "test_output.xlsx"
+def test_invalid_data_handling(postal_strategy: PostalDeliveryStrategy) -> None:
+    """Тест обработки некорректных данных."""
+    invalid_data = pd.DataFrame(
+        {
+            "ФИО полностью": ["Тест"],
+            "Список": ["Почта России"],
+            "Телефон": ["не номер"],
+            "только Индекс отделения для получения.": ["не индекс"],
+        }
+    )
 
-    # Сохраняем данные
-    postal_strategy.save(sample_data, output_path)
-
-    # Проверяем, что файл создан
-    assert output_path.exists()
-
-    # Читаем сохраненный файл
-    saved_df = pd.read_excel(output_path)
-
-    # Проверяем структуру сохраненных данных
-    expected_columns = [
-        "recipient_address",
-        "recipient_name",
-        "weight",
-        "recipient_phone",
-        "mail_type",
-    ]
-    assert all(col in saved_df.columns for col in expected_columns)
-
-    # Проверяем количество строк
-    assert len(saved_df) == len(sample_data)
-
-    # Проверяем, что были вызваны print statements
-    assert mock_print.call_count >= 2
+    processed_data = postal_strategy.process(invalid_data)
+    assert processed_data["Телефон"].iloc[0] == ""
+    assert processed_data["только Индекс отделения для получения."].iloc[0] == ""

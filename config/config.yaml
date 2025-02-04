@@ -7,29 +7,29 @@ columns:
     column_index: 2
     validation:
       allowed_values: ["Лично я", "Другой человек"]
-  
+
   # Поля для получателя "Лично я"
   self_surname:
     source: "Фамилия"
     excel_column: "C"
     column_index: 3
-  
+
   self_name:
     source: "Имя"
     excel_column: "D"
     column_index: 4
-  
+
   # Поля для получателя "Другой человек"
   other_surname:
     source: "Фамилия получателя заказа"
     excel_column: "G"
     column_index: 7
-  
+
   other_name:
     source: "Имя получателя заказа"
     excel_column: "H"
     column_index: 8
-    
+
   # Дополнительные поля
   delivery_method:
     source: "Список"
@@ -45,7 +45,7 @@ columns:
           then: "keep_original"  # Оставляем оригинальное значение для почты
         - when: "default"
           then: "first_word"  # Для остальных берем первое слово до пробела
-  
+
   full_name:
     source: "ФИО полностью"
     excel_column: "J"
@@ -53,7 +53,7 @@ columns:
     required_if:
       field: "delivery_method"
       contains: "Почта"
-  
+
   postal_address:
     source: "только Индекс отделения для получения."
     excel_column: "K"
@@ -61,7 +61,7 @@ columns:
     required_if:
       field: "delivery_method"
       contains: "Почта"
-  
+
   phone:
     source: "Телефон"
     excel_column: "L"
@@ -104,7 +104,7 @@ output:
       - client_name
       - address
       - phone
-  
+
   alternative:
     filename: "labels.xlsx"
     columns:
@@ -116,4 +116,4 @@ output:
 # Общие настройки валидации
 validation:
   allow_empty_strings: false
-  trim_whitespace: true 
+  trim_whitespace: true

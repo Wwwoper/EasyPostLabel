@@ -1,26 +1,28 @@
 """Утилиты для обработки данных."""
 
+from typing import Any
+
 import pandas as pd
 
 from .config import ConfigManager, ReceiverType
 
 
-def get_client_full_name(row, config: ConfigManager) -> str:
-    """Получает ФИО клиента на основе конфигурации.
+def get_client_full_name(row: dict[str, Any], receiver_type_field: str) -> str:
+    """Получение полного имени клиента.
 
     Args:
-        row: строка DataFrame с данными заказа
-        config: экземпляр ConfigManager с настройками
+        row: Словарь с данными клиента
+        receiver_type_field: Поле для определения типа получателя
 
     Returns:
-        str: полное имя клиента
+        str: Полное имя клиента
     """
-    receiver_type = row[config.get_receiver_type_field()]
     # Проверяем, что тип получателя валидный
-    if receiver_type not in [rt.value for rt in ReceiverType]:
-        raise ValueError(f"Неизвестный тип получателя: {receiver_type}")
+    if receiver_type_field not in [rt.value for rt in ReceiverType]:
+        raise ValueError(f"Неизвестный тип получателя: {receiver_type_field}")
 
-    fields = config.get_receiver_fields(receiver_type)
+    config = ConfigManager()
+    fields = config.get_receiver_fields(receiver_type_field)
 
     surname = row[fields["surname_field"]].strip()
     name = row[fields["name_field"]].strip()
@@ -74,7 +76,9 @@ def process_dataframe(df: pd.DataFrame, config: ConfigManager) -> pd.DataFrame:
     Returns:
         DataFrame с добавленным столбцом ФИО клиента
     """
-    df["ФИО клиента"] = df.apply(lambda row: get_client_full_name(row, config), axis=1)
+    df["ФИО клиента"] = df.apply(
+        lambda row: get_client_full_name(row, config.get_receiver_type_field()), axis=1
+    )
     return df
 
 

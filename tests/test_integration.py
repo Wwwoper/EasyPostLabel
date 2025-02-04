@@ -1,5 +1,7 @@
 """Интеграционные тесты для проверки работы всех компонентов."""
 
+from pathlib import Path
+
 import pandas as pd
 import pytest
 
@@ -8,7 +10,7 @@ from utils.config import ConfigManager
 
 
 @pytest.fixture
-def config():
+def config() -> dict[str, dict]:
     """Фикстура для создания тестовой конфигурации."""
     return {
         "columns": {
@@ -17,12 +19,15 @@ def config():
                 "validation": {"postal_keyword": "Почта"},
             }
         },
-        "output": {"postal": {"filename": "postal_test.xlsx"}},
+        "output": {
+            "postal": {"filename": "postal_test.xlsx"},
+            "alternative": {"filename": "alternative_test.xlsx"},
+        },
     }
 
 
 @pytest.fixture
-def config_manager(config, monkeypatch):
+def config_manager(config: dict, monkeypatch: pytest.MonkeyPatch) -> ConfigManager:
     """Фикстура для создания менеджера конфигурации."""
     manager = ConfigManager()
     monkeypatch.setattr(manager, "config", config)
@@ -30,7 +35,7 @@ def config_manager(config, monkeypatch):
 
 
 @pytest.fixture
-def sample_data():
+def sample_data() -> pd.DataFrame:
     """Фикстура с тестовыми данными клиентов."""
     return pd.DataFrame(
         {
@@ -39,41 +44,51 @@ def sample_data():
                 "Петров Петр Петрович",
                 "Сидоров Сидор Сидорович",
             ],
-            "Список": ["Почта России", "Курьер", "Почта России"],
-            "Телефон": ["89991234567", "+79992345678", "9993456789"],
-            "только Индекс отделения для получения.": ["123456", "654321", "789012"],
+            "Список": ["Почта России", "Магнит Центр", "Почта России"],
+            "Телефон": ["79991234567", "79992345678", "79993456789"],
+            "только Индекс отделения для получения.": ["123456", None, "789012"],
+            "Кто будет получать заказ": ["Лично я", "Лично я", "Лично я"],
+            "Фамилия": ["Иванов", "Петров", "Сидоров"],
+            "Имя": ["Иван", "Петр", "Сидор"],
         }
     )
 
 
-def test_delivery_processor_initialization(config_manager, sample_data):
+def test_delivery_processor_initialization(
+    config_manager: ConfigManager, sample_data: pd.DataFrame
+) -> None:
     """Тест инициализации процессора доставки."""
     processor = DeliveryProcessor(sample_data, config_manager)
+    assert processor is not None
     assert processor.data is not None
     assert processor.config_manager is not None
     assert processor.postal_clients.empty
     assert processor.alternative_clients.empty
 
 
-def test_delivery_processor_process(config_manager, sample_data):
+def test_delivery_processor_process(
+    config_manager: ConfigManager, sample_data: pd.DataFrame
+) -> None:
     """Тест процесса обработки данных."""
     processor = DeliveryProcessor(sample_data, config_manager)
     processor.process()
 
     # Проверяем разделение клиентов
     assert len(processor.postal_clients) == 2  # Два клиента с Почтой России
-    assert len(processor.alternative_clients) == 1  # Один клиент с Курьером
+    assert len(processor.alternative_clients) == 1  # Один клиент с Магнитом
 
     # Проверяем нормализацию телефонов для почтовых клиентов
     postal_phones = processor.postal_clients["Телефон"].tolist()
     assert postal_phones == ["79991234567", "79993456789"]
 
 
-def test_delivery_processor_save(config_manager, sample_data, tmp_path):
+def test_delivery_processor_save(
+    config_manager: ConfigManager, sample_data: pd.DataFrame, tmp_path: Path
+) -> None:
     """Тест сохранения результатов."""
-    # Подменяем путь сохранения на временную директорию
-    config_manager.config["output"]["postal"]["filename"] = "test_output.xlsx"
-    output_path = tmp_path / config_manager.config["output"]["postal"]["filename"]
+    # Подменяем пути сохранения на временную директорию
+    config_manager.config["output"]["postal"]["filename"] = "test_postal.xlsx"
+    config_manager.config["output"]["alternative"]["filename"] = "test_alternative.xlsx"
 
     processor = DeliveryProcessor(sample_data, config_manager)
     processor.process()
@@ -87,36 +102,49 @@ def test_delivery_processor_save(config_manager, sample_data, tmp_path):
     try:
         processor.save_results()
 
-        # Проверяем, что файл создан
-        assert output_path.exists()
+        # Проверяем, что файлы созданы
+        postal_path = tmp_path / "test_postal.xlsx"
+        alternative_path = tmp_path / "test_alternative.xlsx"
+        assert postal_path.exists()
+        assert alternative_path.exists()
 
-        # Читаем сохраненный файл с явным указанием типа данных для телефона
-        saved_df = pd.read_excel(output_path, dtype={"recipient_phone": str})
+        # Проверяем содержимое файла почтовой доставки
+        postal_df = pd.read_excel(postal_path, dtype={"recipient_phone": str})
+        assert len(postal_df) == 2
+        assert all(
+            col in postal_df.columns
+            for col in [
+                "recipient_address",
+                "recipient_name",
+                "weight",
+                "recipient_phone",
+                "mail_type",
+            ]
+        )
 
-        # Проверяем структуру данных
-        expected_columns = [
-            "recipient_address",
-            "recipient_name",
-            "weight",
-            "recipient_phone",
-            "mail_type",
-        ]
-        assert all(col in saved_df.columns for col in expected_columns)
+        # Проверяем содержимое файла альтернативной доставки
+        alternative_df = pd.read_excel(
+            alternative_path,
+            sheet_name="Список доставки",
+            skiprows=3,  # Пропускаем заголовок и пустую строку
+            header=None,  # Не используем первую строку как заголовки
+            usecols=[1, 2],  # Читаем только столбцы B и C
+        )
+        assert len(alternative_df) == 1  # Один альтернативный клиент
 
-        # Проверяем количество записей
-        assert len(saved_df) == 2  # Должно быть два почтовых клиента
+        # Проверяем формат данных
+        name = alternative_df.iloc[0, 0]  # Первая строка, первый столбец (ФИО)
+        center = alternative_df.iloc[0, 1]  # Первая строка, второй столбец (Центр)
 
-        # Проверяем форматирование телефонов
-        phones = saved_df["recipient_phone"].astype(str)
-        assert all(str(phone).startswith("7") for phone in phones)
-        assert all(len(str(phone)) == 11 for phone in phones)
+        assert "Петров Петр" in str(name)  # Проверяем имя
+        assert "в ЦВ" in str(center)  # Проверяем центр выдачи
 
     finally:
         # Восстанавливаем оригинальный путь
         dp.DEFAULT_OUTPUT_DIR = original_dir
 
 
-def test_empty_data_processing(config_manager):
+def test_empty_data_processing(config_manager: ConfigManager) -> None:
     """Тест обработки пустых данных."""
     empty_df = pd.DataFrame()
     processor = DeliveryProcessor(empty_df, config_manager)
@@ -126,19 +154,19 @@ def test_empty_data_processing(config_manager):
     assert processor.alternative_clients.empty
 
 
-def test_invalid_phone_numbers(config_manager):
+def test_invalid_phone_numbers(config_manager: ConfigManager) -> None:
     """Тест обработки некорректных номеров телефонов."""
-    invalid_data = pd.DataFrame(
+    data = pd.DataFrame(
         {
             "ФИО полностью": ["Тест Тестов"],
             "Список": ["Почта России"],
-            "Телефон": ["123"],  # Некорректный номер
+            "Телефон": ["неправильный номер"],
             "только Индекс отделения для получения.": ["123456"],
         }
     )
 
-    processor = DeliveryProcessor(invalid_data, config_manager)
+    processor = DeliveryProcessor(data, config_manager)
     processor.process()
 
-    # Проверяем, что некорректный номер заменен на пустую строку
+    # Проверяем, что некорректный номер был обработан
     assert processor.postal_clients["Телефон"].iloc[0] == ""

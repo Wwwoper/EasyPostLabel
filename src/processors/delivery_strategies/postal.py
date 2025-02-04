@@ -19,34 +19,55 @@ class PostalDeliveryStrategy(DeliveryStrategy):
 
         Returns:
             str: Нормализованный номер телефона
-
-        Examples:
-            >>> _normalize_phone("89999002291")
-            "79999002291"
-            >>> _normalize_phone("+79203451508")
-            "79203451508"
-            >>> _normalize_phone("9203451508")
-            "79203451508"
         """
-        if not isinstance(phone, str):
+        # Проверяем на None и пустые значения
+        if phone is None or pd.isna(phone):
+            return ""
+
+        # Проверяем тип и конвертируем в строку
+        try:
+            phone = str(phone)
+        except (TypeError, ValueError):
             return ""
 
         # Удаляем все не цифры
-        phone = re.sub(r"\D", "", phone)
+        clean_phone = re.sub(r"\D", "", phone)
 
-        # Если номер начинается с 8, заменяем на 7
-        if phone.startswith("8"):
-            phone = "7" + phone[1:]
+        # Нормализуем номер
+        if clean_phone.startswith("8"):
+            clean_phone = "7" + clean_phone[1:]
+        elif len(clean_phone) == 10 and clean_phone.startswith("9"):
+            clean_phone = "7" + clean_phone
 
-        # Если номер начинается с 9 и длина 10 цифр, добавляем 7 в начало
-        elif len(phone) == 10 and phone.startswith("9"):
-            phone = "7" + phone
+        # Проверяем финальный формат и возвращаем результат
+        return (
+            clean_phone
+            if len(clean_phone) == 11 and clean_phone.startswith("7")
+            else ""
+        )
 
-        # Проверяем корректность номера (11 цифр, начинается с 7)
-        if len(phone) == 11 and phone.startswith("7"):
-            return phone
+    def _normalize_postcode(self, postcode: str) -> str:
+        """Нормализация почтового индекса.
 
-        return ""
+        Args:
+            postcode: Строка с индексом
+
+        Returns:
+            str: Нормализованный индекс (6 цифр) или пустая строка
+        """
+        # Проверяем на None и пустые значения
+        if postcode is None or pd.isna(postcode):
+            return ""
+
+        # Проверяем тип и конвертируем в строку
+        try:
+            postcode = str(postcode)
+        except (TypeError, ValueError):
+            return ""
+
+        # Удаляем все не цифры и проверяем длину
+        clean_postcode = re.sub(r"\D", "", postcode)
+        return clean_postcode if len(clean_postcode) == 6 else ""
 
     def process(self, data: pd.DataFrame) -> pd.DataFrame:
         """Обработка данных о почтовой доставке.
@@ -57,17 +78,28 @@ class PostalDeliveryStrategy(DeliveryStrategy):
         Returns:
             DataFrame: Обработанные данные почтовых клиентов
         """
+        # Проверяем на пустой DataFrame
+        if data.empty:
+            return pd.DataFrame()
+
         # Создаем копию данных
         processed_data = data.copy()
 
         # Нормализуем телефонные номера
-        processed_data["Телефон"] = processed_data["Телефон"].apply(
-            self._normalize_phone
-        )
+        if "Телефон" in processed_data.columns:
+            processed_data["Телефон"] = processed_data["Телефон"].apply(
+                self._normalize_phone
+            )
+
+        # Нормализуем почтовые индексы
+        if "только Индекс отделения для получения." in processed_data.columns:
+            processed_data["только Индекс отделения для получения."] = processed_data[
+                "только Индекс отделения для получения."
+            ].apply(self._normalize_postcode)
 
         return processed_data
 
-    def save(self, data: pd.DataFrame, output_path: str):
+    def save(self, data: pd.DataFrame, output_path: str) -> None:
         """Сохранение результатов в формате для почты.
 
         Args:

@@ -1,52 +1,45 @@
-"""Основной модуль приложения."""
+"""Основной модуль приложения для обработки данных о доставке."""
 
+import sys
 from pathlib import Path
 
-from processors.delivery_processor import DeliveryProcessor
-from processors.excel_processor import ExcelProcessor
-from validators.data_validator import DataValidator
+# Добавляем путь к src в PYTHONPATH
+sys.path.append(str(Path(__file__).parent / "src"))
+
+# Все импорты после добавления пути
+from processors.delivery_processor import DeliveryProcessor  # noqa: E402
+from processors.excel_processor import ExcelProcessor  # noqa: E402
+from utils.config import ConfigManager  # noqa: E402
 
 
-def process_client_data(input_file: Path) -> tuple[bool, str]:
-    """Основная функция обработки клиентских данных.
-
-    Args:
-        input_file: путь к входному XLSX файлу
-
-    Returns:
-        tuple[bool, str]: (успех операции, сообщение о результате)
-    """
+def main() -> None:
+    """Основная функция приложения."""
     try:
-        # Чтение файла
-        excel_processor = ExcelProcessor(input_file)
-        data = excel_processor.read_data()
+        # Инициализируем конфигурацию
+        config = ConfigManager()
 
-        # Валидация данных
-        validator = DataValidator()
-        if not validator.validate(data):
-            return False, validator.get_error_message()
+        # Создаем процессор Excel и читаем данные
+        input_file = Path("tmp files/input_file.xlsx")
+        if not input_file.exists():
+            print(f"Ошибка: Файл {input_file} не найден")
+            sys.exit(1)
 
-        # Обработка данных о доставке
-        delivery_processor = DeliveryProcessor(data)
+        excel_processor = ExcelProcessor(input_file, config)
+        df = excel_processor.read_data()
+
+        # Создаем процессор доставки
+        delivery_processor = DeliveryProcessor(df, config)
+
+        # Обрабатываем данные
         delivery_processor.process()
 
-        # Сохранение результатов
+        # Сохраняем результаты
         delivery_processor.save_results()
 
-        return True, "Данные успешно обработаны"
-
     except Exception as e:
-        return False, f"Ошибка обработки данных: {str(e)}"
-
-
-def main():
-    """Основная функция приложения."""
-    # Пример использования
-    input_file = Path("input.xlsx")
-    success, message = process_client_data(input_file)
-    print(message)
+        print(f"Произошла ошибка: {str(e)}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
-    main()
     main()

@@ -1,10 +1,11 @@
 """Обработчик Excel файлов."""
 
 from pathlib import Path
-from typing import Dict, List, Set, Tuple
+from typing import Any, Set, Tuple
 
 import pandas as pd
 from openpyxl import load_workbook
+from openpyxl.cell import Cell
 
 from utils.config import ConfigManager
 from utils.utils import get_client_full_name
@@ -13,7 +14,7 @@ from utils.utils import get_client_full_name
 class ExcelProcessor:
     """Обработчик Excel файлов."""
 
-    def __init__(self, file_path: Path, config_manager: ConfigManager):
+    def __init__(self, file_path: Path, config_manager: ConfigManager) -> None:
         """Инициализация обработчика Excel файлов.
 
         Args:
@@ -24,8 +25,16 @@ class ExcelProcessor:
         self.config_manager = config_manager
         self.df: pd.DataFrame | None = None
 
-    def _get_cell_value(self, cell, col_config: dict) -> str:
-        """Получение значения ячейки с учетом её типа."""
+    def _get_cell_value(self, cell: Cell, col_config: dict[str, Any]) -> str:
+        """Получение значения ячейки с учетом её типа.
+
+        Args:
+            cell: Ячейка Excel
+            col_config: Конфигурация столбца
+
+        Returns:
+            str: Значение ячейки в виде строки
+        """
         value = cell.value
 
         if cell.data_type == "n" and value is not None:
@@ -40,11 +49,11 @@ class ExcelProcessor:
 
         # Специальная обработка для поля "Кто будет получать заказ"
         if col_config["source"] == "Кто будет получать заказ" and any(
-            x in value for x in ["-", ":", "."]
+            x in str(value) for x in ["-", ":", "."]
         ):
             if isinstance(value, (int, float)):
                 return ""
-        return value
+        return str(value) if value is not None else ""
 
     def read_data(self) -> pd.DataFrame:
         """Чтение данных из Excel файла.
@@ -98,22 +107,17 @@ class ExcelProcessor:
         except Exception as e:
             raise ValueError(f"Ошибка чтения файла: {str(e)}") from e
 
-    def process_data(self) -> Tuple[List[Dict], List[Dict]]:
-        """Обработка данных из файла.
-
-        Returns:
-            Tuple[List[Dict], List[Dict]]: кортеж из двух списков -
-            почтовые клиенты и остальные клиенты
-        """
-        if self.df is None:
-            self.read_data()
+    def process_data(self, df: pd.DataFrame | None) -> pd.DataFrame:
+        """Обработка данных из Excel файла."""
+        if df is None or df.empty:
+            return pd.DataFrame()
 
         # Создаем множества для хранения уникальных записей
         postal_clients_set: Set[Tuple] = set()
         other_clients_set: Set[Tuple] = set()
 
         # Обрабатываем каждую строку
-        for _, row in self.df.iterrows():
+        for _, row in df.iterrows():
             client_name = get_client_full_name(row, self.config_manager)
             delivery_value = row["Список"]
 
@@ -155,4 +159,4 @@ class ExcelProcessor:
             for record in other_clients_set
         ]
 
-        return postal_clients, other_clients
+        return pd.DataFrame(postal_clients + other_clients)
