@@ -1,15 +1,49 @@
 # Python
 __pycache__/
 *.py[cod]
-*.egg-info
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
 *.egg
-.python-version
-pip-selfcheck.json
-.pytest_cache/
-venv/
-env/
-.venv
 
+# Virtual Environment
+.env
+.venv
+env/
+venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+
+# Project specific
+*.xlsx
+!tests/fixtures/*.xlsx
+logs/
+*.log
 
 # Environment
 .env
@@ -59,4 +93,7 @@ test-reports/
 *.iml
 
 # VS Code
-# .vscode/*
+.vscode/*
+files
+output
+docs
