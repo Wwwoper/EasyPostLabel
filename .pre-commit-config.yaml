@@ -2,7 +2,7 @@
 repos:
 # Стандартные pre-commit хуки
 -   repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
+    rev: v5.0.0
     hooks:
     -   id: trailing-whitespace      # Удаляет лишние пробелы в конце строк
     -   id: end-of-file-fixer       # Добавляет пустую строку в конец файла
@@ -14,35 +14,35 @@ repos:
 
 # Black - форматтер кода Python
 -   repo: https://github.com/psf/black
-    rev: 24.1.1
+    rev: 25.1.0
     hooks:
     -   id: black
         language_version: python3.11
 
 # isort - сортировщик импортов
 -   repo: https://github.com/pycqa/isort
-    rev: 5.13.2
+    rev: 6.0.0
     hooks:
     -   id: isort
         args: ["--profile", "black"]
 
 # flake8 - линтер для проверки стиля кода
 -   repo: https://github.com/pycqa/flake8
-    rev: 7.0.0
+    rev: 7.1.1
     hooks:
     -   id: flake8
         additional_dependencies: [flake8-docstrings]
 
 # mypy - статический анализатор типов
 -   repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.8.0
+    rev: v1.14.1
     hooks:
     -   id: mypy
         additional_dependencies: [types-all]
 
 # bandit - анализатор безопасности кода
 -   repo: https://github.com/PyCQA/bandit
-    rev: 1.7.7
+    rev: 1.8.2
     hooks:
     -   id: bandit
         args: ["-c", "pyproject.toml"]
