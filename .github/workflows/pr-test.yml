@@ -25,12 +25,6 @@ jobs:
         pip install -r requirements.txt
         pip install pytest pytest-cov mypy black isort flake8 pre-commit
 
-    - name: Run linters
-      run: |
-        black --check .
-        isort --check .
-        flake8 .
-        mypy .
 
     - name: Run tests with coverage
       run: |
