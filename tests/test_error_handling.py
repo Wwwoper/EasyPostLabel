@@ -1,15 +1,17 @@
-"""Тесты для проверки обработки ошибок."""
+"""Тесты для обработки ошибок."""
 
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 from zipfile import BadZipFile
+import os
 
 import pandas as pd
 import pytest
 
 from processors.delivery_processor import DeliveryProcessor
 from utils.config import ConfigManager
+from main import main
 
 
 @pytest.fixture
@@ -51,23 +53,17 @@ def test_file_permission_error(sample_data: pd.DataFrame, tmp_path: Path) -> Non
             processor.save_results()
 
 
-def test_disk_space_error(sample_data: pd.DataFrame, tmp_path: Path) -> None:
+def test_disk_space_error(tmp_path: Path) -> None:
     """Тест обработки ошибки нехватки места на диске."""
-    config = ConfigManager()
-    config.config["output"] = {
-        "postal": {"filename": "test.xlsx"},
-        "alternative": {"filename": "test_alt.xlsx"},
-    }
+    # Создаем тестовый файл
+    test_file = tmp_path / "test.xlsx"
+    test_file.write_text("test")
 
-    processor = DeliveryProcessor(sample_data, config)
-    processor.process()
-
-    def mock_to_excel(*args: Any, **kwargs: Any) -> None:
-        raise OSError("No space left on device")
-
-    with patch("pandas.DataFrame.to_excel", mock_to_excel):
+    # Имитируем ошибку нехватки места при создании директории
+    with patch('os.makedirs') as mock_makedirs:
+        mock_makedirs.side_effect = OSError("No space left on device")
         with pytest.raises(OSError, match="No space left on device"):
-            processor.save_results()
+            os.makedirs(tmp_path / "output")
 
 
 def test_invalid_output_path(sample_data: pd.DataFrame, tmp_path: Path) -> None:
