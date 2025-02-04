@@ -59,4 +59,9 @@ test-reports/
 *.iml
 
 # VS Code
-# .vscode/*
+.vscode/*
+tmp files
+output
+docs
+test_app.py
+test2.py
