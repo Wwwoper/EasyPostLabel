@@ -4,26 +4,31 @@
 
 ## 🛠 Структура проекта
 
-```python
+```
 .
-├── .github/                    # GitHub шаблоны
-│   ├── ISSUE_TEMPLATE/        # Шаблоны для issues
-│   └── PULL_REQUEST_TEMPLATE.md
-├── .vscode/                   # Настройки VS Code
-│   └── settings.json          # Синхронизировано с pre-commit
-├── .env.example              # Пример переменных окружения
-├── .flake8                   # Настройки flake8
-├── .gitignore               # Игнорируемые файлы Git
-├── .pre-commit-config.yaml  # Настройки pre-commit хуков
-├── requirements.txt         # Зависимости проекта
-└── README.md               # Документация проекта
+├── config/                    # Конфигурационные файлы
+│   ├── __init__.py
+│   └── config.yaml           # Основной конфиг
+├── src/                      # Исходный код
+│   ├── __init__.py
+│   ├── main.py              # Точка входа
+│   ├── processors/          # Процессоры данных
+│   ├── utils/               # Утилиты
+│   └── validators/          # Валидаторы
+├── tests/                    # Тесты
+├── .gitignore               # Игнорируемые файлы
+├── LICENSE                  # Лицензия
+├── mypy.ini                # Конфигурация mypy
+├── pytest.ini              # Конфигурация pytest
+├── README.md               # Документация проекта
+└── requirements.txt        # Зависимости проекта
 ```
 
 ## ⚙️ Настройка окружения
 
 ### Предварительные требования
 
-- Python 3.9+
+- Python 3.11+
 - Git
 - VS Code (рекомендуется)
 
@@ -104,6 +109,12 @@ pip install python-dotenv
 - **pre-commit** (v4.1.0) - управление хуками
 - **pytest** (v8.0.2) - тестирование
 
+### Дополнительные зависимости проекта
+
+- **pandas** (>=1.3.0) - обработка данных
+- **openpyxl** (>=3.0.0) - работа с Excel
+- **pyyaml** (>=5.4.0) - работа с YAML конфигурацией
+
 ### VS Code расширения
 
 - Python
@@ -183,23 +194,17 @@ mypy .
 
 # Линтинг
 flake8
+
+# Запуск тестов
+pytest
 ```
 
-### Создание issue
-
-Используйте шаблоны в `.github/ISSUE_TEMPLATE/`:
-
-- 🐛 Bug Report
-- 🚀 Feature Request
-- 📚 Documentation
-- ⚡ Improvement
-
-### Pull Requests
+### Создание Pull Request
 
 1. Создайте ветку для изменений
 2. Внесите изменения
 3. Убедитесь, что все проверки пройдены
-4. Создайте Pull Request используя шаблон
+4. Создайте Pull Request используя шаблон из docs/PR.md
 
 ## 📝 Соглашения о коде
 
@@ -207,6 +212,8 @@ flake8
 - Документация: Google style docstrings
 - Типизация: обязательна для всех функций
 - Сортировка импортов: согласно конфигурации isort
+- Тесты: обязательны для нового функционала
+- Комментарии: на русском языке для улучшения понимания
 
 ## 🤝 Участие в разработке
 
