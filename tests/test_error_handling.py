@@ -1,17 +1,17 @@
 """Тесты для обработки ошибок."""
 
+import os
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 from zipfile import BadZipFile
-import os
 
 import pandas as pd
 import pytest
 
+from main import main
 from processors.delivery_processor import DeliveryProcessor
 from utils.config import ConfigManager
-from main import main
 
 
 @pytest.fixture
@@ -60,7 +60,7 @@ def test_disk_space_error(tmp_path: Path) -> None:
     test_file.write_text("test")
 
     # Имитируем ошибку нехватки места при создании директории
-    with patch('os.makedirs') as mock_makedirs:
+    with patch("os.makedirs") as mock_makedirs:
         mock_makedirs.side_effect = OSError("No space left on device")
         with pytest.raises(OSError, match="No space left on device"):
             os.makedirs(tmp_path / "output")

@@ -38,13 +38,17 @@ def test_main_success(tmp_path: Path) -> None:
     output_dir = tmp_path / "output"
     output_dir.mkdir(exist_ok=True)
 
-    with patch('sys.argv', ['main.py', str(input_file)]), \
-         patch('pathlib.Path.exists', return_value=True), \
-         patch('processors.excel_processor.ExcelProcessor.read_data'), \
-         patch('processors.excel_processor.ExcelProcessor.process_data'), \
-         patch('processors.delivery_processor.DeliveryProcessor.process'), \
-         patch('processors.delivery_strategies.postal.PostalDeliveryStrategy.save'), \
-         patch('processors.delivery_strategies.alternative.AlternativeDeliveryStrategy.save'):
+    with patch("sys.argv", ["main.py", str(input_file)]), patch(
+        "pathlib.Path.exists", return_value=True
+    ), patch("processors.excel_processor.ExcelProcessor.read_data"), patch(
+        "processors.excel_processor.ExcelProcessor.process_data"
+    ), patch(
+        "processors.delivery_processor.DeliveryProcessor.process"
+    ), patch(
+        "processors.delivery_strategies.postal.PostalDeliveryStrategy.save"
+    ), patch(
+        "processors.delivery_strategies.alternative.AlternativeDeliveryStrategy.save"
+    ):
         main()
         assert True  # Если дошли до этой точки, значит ошибок не было
 
