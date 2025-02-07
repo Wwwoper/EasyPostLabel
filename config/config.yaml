@@ -190,14 +190,29 @@ file_settings:
 
 # Настройки Excel
 excel_settings:
-  default:
-    sheet_index: 0
-    header_row: 0
-  styling:
-    column_width: 30
-    row_height: 25
-    font_size: 12
+  defaults:
     font_name: "Century"
+    font_size: 13
+    font_bold: false
+    spacing_width: 0.5
+    row_height: 25.0
+    sender:
+      name: "Беренёвой Ольги"
+      phone: "+79159833971"
+  label:
+    # Настройки для бирок
+    alignment:
+      horizontal: "center"
+      vertical: "center"
+      wrap_text: true
+    row_height: 20.0    # Высота строки в списке доставки
+  list:
+    # Настройки для списка
+    alignment:
+      horizontal: "left"
+      vertical: "center"
+      wrap_text: true
+    row_height: 15.0    # Высота строки в списке доставки
 
 # Настройки логирования
 logging:
@@ -209,25 +224,3 @@ logging:
     console_level: "INFO"
     file_level: "DEBUG"
     format: "%(asctime)s - %(levelname)s - %(message)s"
-
-# Настройки нормализации
-normalization:
-  phone:
-    country_code: "7"
-    min_length: 10
-    max_length: 11
-    patterns:
-      - "^\\+?[7|8]?\\d{10}$"
-      - "^\\+?[7|8]?\\s*\\(\\d{3}\\)\\s*\\d{3}[\\-\\s]*\\d{2}[\\-\\s]*\\d{2}$"
-  postcode:
-    length: 6
-    validate_region: true
-    allowed_regions: 
-      - "150"  # Ярославская область
-      - "152"
-      - "153"
-  name:
-    min_length: 2
-    max_length: 100
-    capitalize: true
-    remove_extra_spaces: true

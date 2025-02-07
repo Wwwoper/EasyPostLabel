@@ -65,11 +65,21 @@ output:
 
 # Настройки стилей для тестов
 excel_settings:
-  styling:
-    column_width: 30
-    row_height: 25
-    font_size: 12
+  defaults:
     font_name: "Century"
+    font_size: 13
+    font_bold: false
+    spacing_width: 0.5
+    row_height: 25.0
+  sender:
+    name: "Беренёвой Ольги"
+    phone: "+79159833971"
+  label:
+    # Настройки для бирок
+    alignment:
+      horizontal: "center"
+      vertical: "center"
+      wrap_text: true
 
 # Настройки нормализации для тестов
 normalization:

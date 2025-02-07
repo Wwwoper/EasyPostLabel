@@ -100,24 +100,76 @@ class PickupPointClient:
 class PickupPointStrategy(DeliveryStrategy):
     """Стратегия обработки данных для пунктов выдачи."""
 
-    SENDER_NAME = "Беренёвой Ольги"
-    SENDER_PHONE = "+79159833971"
-
     def __init__(self, config_manager: ConfigManager) -> None:
         """Инициализация стратегии."""
         self.config_manager = config_manager
         self.config = config_manager.config["delivery_methods"]["types"]["Центр_Выдачи"]
+        # Получаем данные отправителя из конфига
+        sender_config = self.config_manager.get_setting("excel_settings.sender", {})
+        self.sender_name = sender_config.get("name", "")
+        self.sender_phone = sender_config.get("phone", "")
+
+    def _create_named_style(
+        self, name: str, workbook: Workbook, style_type: str = "default"
+    ) -> NamedStyle:
+        """Создание именованного стиля с настройками из конфига.
+
+        Args:
+            name: Имя стиля
+            workbook: Рабочая книга Excel
+            style_type: Тип стиля ('label' или 'list')
+
+        Returns:
+            NamedStyle: Созданный стиль
+        """
+        # Получаем настройки стилей
+        styles = self.config_manager.get_setting(f"excel_settings.{style_type}", {})
+        defaults = self.config_manager.get_setting("excel_settings.defaults", {})
+
+        # Фиксированные значения по умолчанию
+        DEFAULT_VALUES = {
+            "font_name": "Century",
+            "font_size": 13,
+            "font_bold": False,
+        }
+
+        # Создаем стиль
+        style = NamedStyle(name=name)
+        style.font = Font(
+            name=styles.get(
+                "font_name", defaults.get("font_name", DEFAULT_VALUES["font_name"])
+            ),
+            size=styles.get(
+                "font_size", defaults.get("font_size", DEFAULT_VALUES["font_size"])
+            ),
+            bold=styles.get(
+                "font_bold", defaults.get("font_bold", DEFAULT_VALUES["font_bold"])
+            ),
+        )
+
+        # Добавляем границы для бирок
+        if style_type == "label":
+            border = Side(style="thin", color="000000")
+            style.border = Border(left=border, right=border, top=border, bottom=border)
+
+        # Настройки выравнивания
+        alignment = styles.get("alignment", {})
+        style.alignment = Alignment(
+            horizontal=alignment.get("horizontal", "left"),
+            vertical=alignment.get("vertical", "center"),
+            wrap_text=alignment.get("wrap_text", True),
+        )
+
+        # Добавляем стиль в книгу, если его еще нет
+        if name not in workbook.named_styles:
+            workbook.add_named_style(style)
+
+        return style
 
     def _create_styles(self, workbook: Workbook) -> NamedStyle:
         """Создание стилей для бирок."""
-        style = NamedStyle(name="birka")
-        style.font = Font(name="Century", size=13, b=True)  # используем b вместо bold
-        border = Side(style="thin", color="000000")
-        style.border = Border(left=border, right=border, top=border, bottom=border)
-        style.alignment = Alignment(
-            horizontal="center", vertical="center", wrap_text=True
-        )
-        workbook.add_named_style(style)
+        # Создаем стиль для бирок
+        style = self._create_named_style("birka", workbook, "label")
         return style
 
     def _create_labels(
@@ -126,20 +178,36 @@ class PickupPointStrategy(DeliveryStrategy):
         """Создание бирок на листе."""
         logger.info("Начало создания бирок для %d клиентов", len(data))
 
-        row = 1
         col_map = {0: "A", 1: "C", 2: "E"}
 
-        for idx, client in enumerate(data.itertuples(), 1):
-            col = col_map[idx % 3]
+        # Используем reset_index для гарантии порядка
+        data = data.reset_index(drop=True)
+
+        # Начальная строка
+        current_row = 1
+
+        # Итерируемся по индексам для сохранения порядка
+        for idx in range(len(data)):
+            client = data.iloc[idx]
+            position = idx % 3  # Позиция в текущей строке (0, 1, 2)
+            col = col_map[position]
+
             logger.debug(
-                "Создание бирки #%d: позиция=%s%d, клиент=%s", idx, col, row, client.ФИО
+                "Создание бирки #%d: позиция=%s%d, клиент=%s",
+                idx + 1,
+                col,
+                current_row,
+                client["ФИО"],
             )
 
             # Добавляем данные и применяем стили
             cells = [
-                (f"{col}{row}", client.ФИО),
-                (f"{col}{row+1}", f"в ЦВ {client.Центр_Выдачи}"),
-                (f"{col}{row+2}", "от Беренёвой Ольги"),
+                (f"{col}{current_row}", client["ФИО"]),
+                (f"{col}{current_row+1}", f"в ЦВ {client['Центр_Выдачи']}"),
+                (
+                    f"{col}{current_row+2}",
+                    f"от {self.sender_name if self.sender_name else 'Беренёвой Ольги'}",
+                ),
             ]
 
             for cell_ref, value in cells:
@@ -149,9 +217,9 @@ class PickupPointStrategy(DeliveryStrategy):
                 logger.debug("Ячейка %s: значение='%s'", cell_ref, value)
 
             # Переходим к следующей группе бирок
-            if idx % 3 == 0:
-                row += 4
-                logger.debug("Переход на новую строку: %d", row)
+            if position == 2:  # После третьей бирки (индексы 0,1,2)
+                current_row += 4
+                logger.debug("Переход на новую строку: %d", current_row)
 
         logger.info("Создание бирок завершено")
 
@@ -159,52 +227,97 @@ class PickupPointStrategy(DeliveryStrategy):
         """Форматирование листа с бирками."""
         logger.debug("Начало форматирования листа")
 
+        # Получаем настройки стилей
+        styles = self.config_manager.get_setting("excel_settings.styling", {})
+        defaults = self.config_manager.get_setting("excel_settings.defaults", {})
+        spacing = styles.get("spacing", {})
+
+        # Фиксированные значения по умолчанию, если нет в конфиге
+        DEFAULT_VALUES = {
+            "column_width": 30.0,
+            "spacing_width": 0.5,  # Стандартная ширина промежуточных колонок
+            "row_height": 25.0,
+            "spacing_height": 2.5,
+            "font_name": "Century",
+            "font_size": 13,
+            "font_bold": False,
+        }
+
+        # Получаем размеры из конфигурации
+        column_width = styles.get(
+            "column_width", defaults.get("column_width", DEFAULT_VALUES["column_width"])
+        )
+        spacing_width = spacing.get("column", {}).get(
+            "width", defaults.get("spacing_width", DEFAULT_VALUES["spacing_width"])
+        )
+        row_height = styles.get(
+            "row_height", defaults.get("row_height", DEFAULT_VALUES["row_height"])
+        )
+        spacing_height = spacing.get("row", {}).get(
+            "height", defaults.get("spacing_height", DEFAULT_VALUES["spacing_height"])
+        )
+
         # Устанавливаем размеры основных колонок
         for col in ["A", "C", "E"]:
-            sheet.column_dimensions[col].width = 30
-            logger.debug("Установлена ширина колонки %s: 30", col)
+            sheet.column_dimensions[col].width = column_width
+            logger.debug("Установлена ширина колонки %s: %d", col, column_width)
 
         # Устанавливаем минимальную ширину промежуточных колонок
         for col in ["B", "D"]:
-            sheet.column_dimensions[col].width = 0.17  # примерно 1 мм
-            logger.debug("Установлена минимальная ширина колонки %s: 0.17", col)
+            sheet.column_dimensions[col].width = spacing_width
+            logger.debug(
+                "Установлена минимальная ширина колонки %s: %f", col, spacing_width
+            )
 
         # Устанавливаем высоту строк
         for row in range(1, sheet.max_row + 1):
-            height = 25 if row % 4 != 0 else 3
+            height = row_height if row % 4 != 0 else spacing_height
             sheet.row_dimensions[row].height = height
-            logger.debug("Установлена высота строки %d: %d", row, height)
+            logger.debug("Установлена высота строки %d: %f", row, height)
 
         logger.debug("Форматирование листа завершено")
 
     def _create_delivery_list(
-        self, data: pd.DataFrame, sheet: Worksheet, style: NamedStyle
+        self,
+        data: pd.DataFrame,
+        sheet: Worksheet,
+        style: NamedStyle,
     ) -> None:
-        """Создание списка доставки на листе.
-
-        Args:
-            data: DataFrame с данными
-            sheet: Лист Excel
-            style: Стиль для списка
-        """
+        """Создание списка доставки на листе."""
         logger.debug("Начало создания списка доставки")
 
+        # Получаем настройки стилей
+        styles = self.config_manager.get_setting("excel_settings.list", {})
+        defaults = self.config_manager.get_setting("excel_settings.defaults", {})
+
+        # Фиксированные значения по умолчанию
+        DEFAULT_VALUES = {
+            "column_width": 30.0,
+            "row_height": 25.0,
+        }
+
+        # Создаем стиль для списка
+        list_style = self._create_named_style("delivery_list", sheet.parent, "list")
+
         # Заголовок
-        sheet["B1"].value = f"Заказы от {self.SENDER_NAME} {self.SENDER_PHONE}"
-        sheet["B1"].style = style
+        sheet["B1"].value = f"Заказы от {self.sender_name} {self.sender_phone}"
+        sheet["B1"].style = list_style
         sheet["B2"].value = ""
 
         # Дата и количество
         today = datetime.date.today().strftime("%d.%m.%Y")
         sheet["B3"].value = today
         sheet["C3"].value = f"{len(data)} человек в списке"
-        sheet["B3"].style = style
-        sheet["C3"].style = style
+        sheet["B3"].style = list_style
+        sheet["C3"].style = list_style
 
         # Устанавливаем размеры колонок
         sheet.column_dimensions["A"].width = 5
-        sheet.column_dimensions["B"].width = 30
-        sheet.column_dimensions["C"].width = 30
+        column_width = styles.get(
+            "column_width", defaults.get("column_width", DEFAULT_VALUES["column_width"])
+        )
+        sheet.column_dimensions["B"].width = column_width
+        sheet.column_dimensions["C"].width = column_width
 
         # Сортируем данные
         sorted_data = data.sort_values(["Центр_Выдачи", "ФИО"])
@@ -218,19 +331,23 @@ class PickupPointStrategy(DeliveryStrategy):
             sheet[f"B{row_num}"].value = row["ФИО"]
             sheet[f"C{row_num}"].value = f"в ЦВ {row['Центр_Выдачи']}"
 
-            sheet[f"B{row_num}"].style = style
-            sheet[f"C{row_num}"].style = style
+            sheet[f"B{row_num}"].style = list_style
+            sheet[f"C{row_num}"].style = list_style
 
             new_center = str(row["Центр_Выдачи"])
             needs_border = current_center and current_center != new_center
 
             if needs_border:
                 prev_row = row_num - 1
-                sheet[f"B{prev_row}"].border = border_bottom
-                sheet[f"C{prev_row}"].border = border_bottom
+                border = Border(bottom=Side(style="thin"))
+                sheet[f"B{prev_row}"].border = border
+                sheet[f"C{prev_row}"].border = border
 
             current_center = new_center
-            sheet.row_dimensions[row_num].height = 15
+            row_height = styles.get(
+                "row_height", defaults.get("row_height", DEFAULT_VALUES["row_height"])
+            )
+            sheet.row_dimensions[row_num].height = row_height
             row_num += 1
 
         # Добавляем границу последней строке
@@ -338,45 +455,31 @@ class PickupPointStrategy(DeliveryStrategy):
             raise
 
     def save(self, data: pd.DataFrame, output_path: str) -> None:
-        """Сохранение данных в Excel файл.
-
-        Args:
-            data: DataFrame с данными
-            output_path: путь для сохранения файла
-        """
-        # Сортируем данные по ФИО
-        sorted_data = data.sort_values("ФИО").reset_index(drop=True)
+        """Сохранение данных в Excel файл."""
+        # Создаем копию данных
+        data_copy = data.copy()
 
         # Создаем новый Excel файл
         wb = Workbook()
-        sheet = wb.active
-        sheet.title = "Бирки"
 
-        # Получаем настройки стилей
-        styles = self.config_manager.get_setting("excel_settings.styling", {})
+        # Создаем листы
+        labels_sheet = wb.active
+        labels_sheet.title = "Бирки"
+        delivery_sheet = wb.create_sheet("Список доставки")
 
-        # Устанавливаем ширину промежуточных колонок сразу
-        for col_letter in ["B", "D"]:
-            sheet.column_dimensions[col_letter].width = 0.17
+        # Создаем стили для бирок и списка
+        style = self._create_styles(wb)
 
-        # Заполняем данные
-        row = 1
-        col = 1
-        for _, record in sorted_data.iterrows():
-            # Добавляем бирку
-            self._add_label(sheet, row, col, record, styles)
+        # Создаем бирки (с сортировкой по ФИО)
+        labels_data = data_copy.sort_values("ФИО").copy()
+        self._create_labels(labels_data, labels_sheet, style)
 
-            # Переходим к следующей позиции
-            col += 2
-            if col > 5:  # Максимум 3 бирки в строке
-                # Устанавливаем высоту промежутка между группами бирок
-                sheet.row_dimensions[row + 3].height = 3
-                col = 1
-                row += 4
+        # Форматируем лист с бирками
+        self._format_worksheet(labels_sheet)
 
-        # Если есть данные, устанавливаем высоту последнего промежутка
-        if not sorted_data.empty:
-            sheet.row_dimensions[row + 3].height = 3
+        # Создаем список доставки на втором листе (с сортировкой по центрам и ФИО)
+        delivery_data = data_copy.sort_values(["Центр_Выдачи", "ФИО"]).copy()
+        self._create_delivery_list(delivery_data, delivery_sheet, style)
 
         # Сохраняем файл
         wb.save(output_path)
@@ -384,33 +487,20 @@ class PickupPointStrategy(DeliveryStrategy):
     def _add_label(
         self, sheet, row: int, col: int, record: pd.Series, styles: dict
     ) -> None:
-        """Добавление одной бирки на лист.
+        """Добавление одной бирки на лист."""
+        try:
+            style = sheet.parent._named_styles.get("birka")
+        except (AttributeError, KeyError):
+            style = None
 
-        Args:
-            sheet: Лист Excel для добавления бирки
-            row: Номер строки
-            col: Номер колонки
-            record: Строка данных
-            styles: Настройки стилей
-        """
-        # Создаем стиль для бирки
-        style = NamedStyle(name=f"birka_{row}_{col}")
-        style.font = Font(
-            name=styles.get("font_name", "Century"),
-            size=13,  # Фиксированный размер шрифта
-            bold=True,
-        )
-        border = Side(style="thin", color="000000")
-        style.border = Border(left=border, right=border, top=border, bottom=border)
-        style.alignment = Alignment(
-            horizontal="center", vertical="center", wrap_text=True
-        )
+        if not style:
+            raise ValueError("Style 'birka' not found")
 
         # Добавляем данные и применяем стили
         cells = [
             (row, record["ФИО"]),
             (row + 1, f"в ЦВ {record['Центр_Выдачи']}"),
-            (row + 2, f"от {self.SENDER_NAME}"),
+            (row + 2, f"от {self.sender_name}"),
         ]
 
         for row_idx, value in cells:
