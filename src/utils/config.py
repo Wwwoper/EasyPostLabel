@@ -120,3 +120,66 @@ class ConfigManager:
         """Получение конфигурации вывода для типа доставки."""
         output_config = self.config.get("output", {}).get(delivery_type, {})
         return cast(Dict[str, Any], output_config)
+
+    def get_required_fields(self, delivery_type: str) -> list:
+        """Получение списка обязательных полей для типа доставки.
+
+        Args:
+            delivery_type: Тип доставки ('Почта' или 'Центр_Выдачи')
+
+        Returns:
+            list: Список обязательных полей
+
+        Raises:
+            ValueError: Если тип доставки не найден
+        """
+        try:
+            delivery_types = self.config.get("delivery_methods", {}).get("types", {})
+            delivery_config = delivery_types.get(delivery_type)
+
+            if not delivery_config:
+                raise ValueError(f"Тип доставки не найден: {delivery_type}")
+
+            # Получаем все поля для типа доставки
+            required_fields = []
+
+            # Добавляем общие поля
+            common_fields = delivery_config.get("required_fields", {}).get("common", [])
+            required_fields.extend(common_fields)
+
+            # Добавляем поля для разных типов получателей
+            receiver_fields = delivery_config.get("required_fields", {})
+            for receiver_type, fields in receiver_fields.items():
+                if receiver_type != "common" and isinstance(fields, list):
+                    required_fields.extend(fields)
+
+            return required_fields
+
+        except Exception as e:
+            logger.error("Ошибка при получении обязательных полей: %s", str(e))
+            raise
+
+    def get_output_template(self, template_type: str) -> Dict[str, Any]:
+        """Получение шаблона вывода по типу.
+
+        Args:
+            template_type: Тип шаблона ('postal' или 'pickup_point')
+
+        Returns:
+            Dict[str, Any]: Конфигурация шаблона
+
+        Raises:
+            ValueError: Если шаблон не найден
+        """
+        try:
+            templates = self.config.get("output", {}).get("templates", {})
+            template = templates.get(template_type)
+
+            if not template:
+                raise ValueError(f"Шаблон вывода не найден: {template_type}")
+
+            return cast(Dict[str, Any], template)
+
+        except Exception as e:
+            logger.error("Ошибка при получении шаблона вывода: %s", str(e))
+            raise

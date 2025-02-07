@@ -5,7 +5,7 @@ import pandas as pd
 from utils.config import ConfigManager
 from utils.constants import DEFAULT_OUTPUT_DIR
 
-from .delivery_strategies.alternative import AlternativeDeliveryStrategy
+from .delivery_strategies.pickup_point import PickupPointStrategy
 from .delivery_strategies.postal import PostalDeliveryStrategy
 
 
@@ -22,9 +22,9 @@ class DeliveryProcessor:
         self.data = data
         self.config_manager = config_manager
         self.postal_strategy = PostalDeliveryStrategy()
-        self.alternative_strategy = AlternativeDeliveryStrategy(config_manager)
+        self.pickup_strategy = PickupPointStrategy(config_manager)
         self.postal_clients = pd.DataFrame()
-        self.alternative_clients = pd.DataFrame()
+        self.pickup_clients = pd.DataFrame()
 
     def _validate_postal_data(self, data: pd.DataFrame) -> bool:
         """Проверка наличия необходимых полей для почтовой доставки.
@@ -114,7 +114,7 @@ class DeliveryProcessor:
                     # Отладочная информация с новыми именами колонок
                     print(f"\nНайдено почтовых клиентов: {len(self.postal_clients)}")
                     print(
-                        f"Найдено альтернативных клиентов: {len(self.alternative_clients)}"
+                        f"Найдено клиентов центров выдачи: {len(self.pickup_clients)}"
                     )
 
                     if not self.postal_clients.empty:
@@ -123,12 +123,10 @@ class DeliveryProcessor:
             else:
                 print("\nНет данных для почтовой доставки")
 
-            # Обработка альтернативных клиентов
-            alternative_data = self.data[~postal_mask]
-            if not alternative_data.empty:
-                self.alternative_clients = self.alternative_strategy.process(
-                    alternative_data
-                )
+            # Обработка клиентов центров выдачи
+            pickup_data = self.data[~postal_mask].copy()
+            if not pickup_data.empty:
+                self.pickup_clients = self.pickup_strategy.process(pickup_data)
 
         except Exception as e:
             print(f"Ошибка при обработке данных: {str(e)}")
@@ -163,17 +161,15 @@ class DeliveryProcessor:
                 print(f"\nСохранение почтовых клиентов в {output_path}")
                 self.postal_strategy.save(self.postal_clients, str(output_path))
 
-            # Сохранение альтернативных клиентов
+            # Сохранение клиентов центров выдачи
             pickup_template = output_templates.get("pickup_point", {})
-            if not self.alternative_clients.empty:
+            if not self.pickup_clients.empty:
                 if "filename" not in pickup_template:
-                    raise ValueError("Не указано имя файла для альтернативных клиентов")
+                    raise ValueError("Не указано имя файла для клиентов центров выдачи")
 
                 output_path = DEFAULT_OUTPUT_DIR / pickup_template["filename"]
-                print(f"Сохранение альтернативных клиентов в {output_path}")
-                self.alternative_strategy.save(
-                    self.alternative_clients, str(output_path)
-                )
+                print(f"Сохранение клиентов центров выдачи в {output_path}")
+                self.pickup_strategy.save(self.pickup_clients, str(output_path))
 
         except Exception as e:
             print(f"\nОшибка при сохранении результатов: {str(e)}")
