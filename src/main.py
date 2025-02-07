@@ -1,5 +1,6 @@
 """Основной модуль приложения для обработки данных о доставке."""
 
+import os
 from pathlib import Path
 
 from processors.delivery_processor import DeliveryProcessor
@@ -21,7 +22,7 @@ def setup_environment() -> tuple[Path, ConfigManager]:
     Raises:
         FileNotFoundError: если входной файл не найден
     """
-    input_file = Path("files/new_file.xlsx")
+    input_file = Path("files/new_file_copy.xlsx")
     if not input_file.exists():
         raise FileNotFoundError(f"Файл не найден: {input_file}")
 
@@ -71,9 +72,20 @@ def process_delivery_data(input_file: Path, config: ConfigManager) -> bool:
         return False
 
 
+def check_config_exists():
+    """Проверяет наличие файла конфигурации.
+
+    Raises:
+        FileNotFoundError: если файл конфигурации не найден
+    """
+    if not os.path.exists("config/config.yaml"):
+        raise FileNotFoundError("Отсутствует файл конфигурации config/config.yaml")
+
+
 def main() -> None:
     """Основная функция приложения."""
     try:
+        check_config_exists()
         # Инициализация
         input_file, config = setup_environment()
 
@@ -90,4 +102,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    check_config_exists()
     main()

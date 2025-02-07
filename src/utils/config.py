@@ -56,17 +56,19 @@ class ReceiverType(Enum):
 class ConfigManager:
     """Менеджер конфигурации."""
 
-    def __init__(self, config_path: Optional[Path] = None):
-        """Инициализация менеджера конфигурации."""
-        self.config_path = config_path or DEFAULT_CONFIG_PATH
+    def __init__(self, config_path=None):
+        """Инициализация менеджера конфигурации.
+        
+        Args:
+            config_path: Путь к файлу конфигурации. По умолчанию 'config/config.yaml'
+        """
+        self.config_path = config_path or "config/config.yaml"
         self.config = self._load_config()
 
-    def _load_config(self) -> Dict[str, Any]:
-        """Загрузка конфигурации из YAML файла."""
+    def _load_config(self):
         try:
             with open(self.config_path, "r", encoding="utf-8") as f:
-                loaded_config = yaml.safe_load(f)
-                return cast(Dict[str, Any], loaded_config or {})
+                return yaml.safe_load(f)
         except Exception as e:
             raise ValueError(f"Ошибка загрузки конфигурации: {str(e)}") from e
 

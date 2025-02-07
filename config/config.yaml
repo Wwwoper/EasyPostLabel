@@ -61,8 +61,16 @@ delivery_methods:
       title: "Центр выдачи"
       description: "Получение заказа в центре выдачи"
       receiver_types:
-        - "Лично я"
-        - "Другой человек"
+        self:
+          type: "Лично я"
+          name_fields:
+            surname: "Фамилия"
+            name: "Имя"
+        other:
+          type: "Другой человек"
+          name_fields:
+            surname: "Фамилия получателя заказа"
+            name: "Имя получателя заказа"
       required_fields:
         common:
           - field: "pickup_point"
@@ -110,17 +118,6 @@ delivery_methods:
             source: "full_name"
           - name: "Центр_Выдачи"
             source: "pickup_point"
-      receiver_types:
-        self:
-          type: "Лично я"
-          name_fields:
-            surname: "Фамилия"
-            name: "Имя"
-        other:
-          type: "Другой человек"
-          name_fields:
-            surname: "Фамилия получателя заказа"
-            name: "Имя получателя заказа"
       pickup_point:
         source_column: "Список"
         split_by: " "  # разделитель для получения кода центра

@@ -4,6 +4,7 @@ import logging
 import re
 from dataclasses import dataclass
 from typing import List, Optional, Pattern
+import os
 
 import pandas as pd
 
@@ -11,7 +12,13 @@ from utils.config import ConfigManager
 from utils.exceptions import ValidationError
 
 logger = logging.getLogger(__name__)
-config = ConfigManager()
+
+# Изменяем глобальную инициализацию на ленивую через функцию
+def get_config():
+    """Получение конфигурации с учетом окружения (тесты/продакшн)."""
+    if os.environ.get("TESTING"):
+        return ConfigManager("tests/data/test_config.yaml")
+    return ConfigManager()
 
 
 @dataclass
@@ -25,7 +32,7 @@ class PhoneNormalizationConfig:
     @classmethod
     def from_config(cls) -> 'PhoneNormalizationConfig':
         """Создание конфигурации из настроек."""
-        phone_config = config.get_setting("normalization.phone", {})
+        phone_config = get_config().get_setting("normalization.phone", {})
         return cls(
             country_code=phone_config.get("country_code", "7"),
             min_length=phone_config.get("min_length", 10),
@@ -37,13 +44,25 @@ class PhoneNormalizationConfig:
 class PhoneNormalizer:
     """Нормализатор телефонных номеров."""
 
-    def __init__(self):
-        self.config = PhoneNormalizationConfig.from_config()
+    def __init__(self, config=None):
+        """Инициализация нормализатора.
+        
+        Args:
+            config: Конфигурация нормализатора или ConfigManager
+        """
+        if config is None:
+            config = get_config()
+            
+        # Если передан ConfigManager, получаем конфигурацию нормализатора
+        if isinstance(config, ConfigManager):
+            self.config = PhoneNormalizationConfig.from_config()
+        else:
+            self.config = config
 
     @staticmethod
     def _clean_phone(phone: str) -> str:
         """Очистка номера от всех не цифр."""
-        return re.sub(r"\D", "", str(phone))
+        return re.sub(r"[^\d]", "", phone)
 
     def _validate_phone(self, phone: str) -> bool:
         """Проверка формата номера."""
@@ -51,20 +70,34 @@ class PhoneNormalizer:
             return True
         return any(pattern.match(phone) for pattern in self.config.patterns)
 
-    def normalize(self, phone: Optional[str]) -> str:
-        """Нормализация телефонного номера."""
+    def normalize(self, phone: Optional[str | int | float]) -> str:
+        """Нормализация телефонного номера.
+        
+        Args:
+            phone: Номер телефона в любом формате
+            
+        Returns:
+            str: Нормализованный номер или пустая строка в случае ошибки
+        """
         try:
-            if not phone or pd.isna(phone):
+            if pd.isna(phone):
                 return ""
 
-            # Очищаем номер
-            digits = self._clean_phone(phone)
+            # Преобразуем в строку и очищаем
+            phone_str = str(phone).strip()
+            
+            # Если это число с точкой, преобразуем в целое
+            if isinstance(phone, float):
+                phone_str = str(int(float(phone_str)))
+
+            # Очищаем номер от всех не цифр
+            digits = self._clean_phone(phone_str)
             if not digits:
                 return ""
 
             # Проверяем длину
             if len(digits) < self.config.min_length or len(digits) > self.config.max_length:
-                logger.warning("Некорректная длина номера: %s", phone)
+                logger.warning("Некорректная длина номера: %s (длина: %d)", phone, len(digits))
                 return ""
 
             # Нормализуем
@@ -95,7 +128,7 @@ class PostcodeNormalizationConfig:
     @classmethod
     def from_config(cls) -> 'PostcodeNormalizationConfig':
         """Создание конфигурации из настроек."""
-        postcode_config = config.get_setting("normalization.postcode", {})
+        postcode_config = get_config().get_setting("normalization.postcode", {})
         return cls(
             length=postcode_config.get("length", 6),
             validate_region=postcode_config.get("validate_region", False),
@@ -106,8 +139,20 @@ class PostcodeNormalizationConfig:
 class PostcodeNormalizer:
     """Нормализатор почтовых индексов."""
 
-    def __init__(self):
-        self.config = PostcodeNormalizationConfig.from_config()
+    def __init__(self, config=None):
+        """Инициализация нормализатора.
+        
+        Args:
+            config: Конфигурация нормализатора или ConfigManager
+        """
+        if config is None:
+            config = get_config()
+        
+        # Если передан ConfigManager, получаем конфигурацию нормализатора
+        if isinstance(config, ConfigManager):
+            self.config = PostcodeNormalizationConfig.from_config()
+        else:
+            self.config = config
 
     def normalize(self, postcode: Optional[str | int | float]) -> str:
         """Нормализация почтового индекса."""
