@@ -60,21 +60,31 @@ class AlternativeDeliveryStrategy(DeliveryStrategy):
         Returns:
             str: Полное имя с заглавными буквами
         """
-        # Определяем тип получателя
-        receiver_type = row.get("Кто будет получать заказ", "")
+        try:
+            # Определяем тип получателя
+            receiver_type = row.get("Получатель заказа", "").strip()
 
-        if receiver_type == "Лично я":
-            surname = self._get_first_word_right(str(row.get("Фамилия", "")))
-            name = self._get_first_word_right(str(row.get("Имя", "")))
-        else:  # "Другой человек"
-            surname = self._get_first_word_right(
-                str(row.get("Фамилия получателя заказа", ""))
-            )
-            name = self._get_first_word_right(str(row.get("Имя получателя заказа", "")))
+            if receiver_type == "Лично я":
+                surname = str(row.get("Фамилия", "")).strip()
+                name = str(row.get("Имя", "")).strip()
+            else:  # "Другой человек"
+                surname = str(row.get("Фамилия получателя заказа", "")).strip()
+                name = str(row.get("Имя получателя заказа", "")).strip()
 
-        # Объединяем фамилию и имя, гарантируя Title Case для каждого слова
-        full_name = " ".join(part for part in [surname, name] if part)
-        return full_name.title() if full_name else ""
+            # Проверяем наличие данных
+            if not surname or not name:
+                print(
+                    f"\nПропуск записи: отсутствует фамилия или имя для {receiver_type}"
+                )
+                return ""
+
+            # Объединяем фамилию и имя, гарантируя Title Case для каждого слова
+            full_name = f"{surname} {name}".title()
+            return full_name
+
+        except Exception as e:
+            print(f"\nОшибка при формировании имени: {str(e)}")
+            return ""
 
     def _create_styles(self, workbook: Workbook) -> tuple[NamedStyle, NamedStyle]:
         """Создание стилей для Excel.
@@ -185,26 +195,50 @@ class AlternativeDeliveryStrategy(DeliveryStrategy):
         Returns:
             DataFrame: Обработанные данные
         """
-        if data.empty:
-            return pd.DataFrame()
+        try:
+            if data.empty:
+                return pd.DataFrame()
 
-        # Проверяем наличие необходимых столбцов
-        required_columns = ["Список"]  # Можно добавить другие необходимые столбцы
-        if not all(col in data.columns for col in required_columns):
-            return pd.DataFrame()
+            print("\nДанные для обработки:")
+            print(data.head())
 
-        processed_data = data.copy()
-        processed_data["ФИО"] = processed_data.apply(self._combine_name, axis=1)
-        processed_data["Центр_Выдачи"] = processed_data["Список"].apply(
-            self._get_first_word
-        )
+            # Проверяем наличие необходимых столбцов
+            required_columns = [
+                "Получатель заказа",
+                "Список",
+                "Фамилия",
+                "Имя",
+                "Фамилия получателя заказа",
+                "Имя получателя заказа",
+            ]
 
-        result = processed_data[["ФИО", "Центр_Выдачи"]]
-        result = result.dropna()
-        result = result.drop_duplicates(subset=["ФИО"], keep="first")
-        result = result.sort_values("ФИО")
+            missing_columns = [
+                col for col in required_columns if col not in data.columns
+            ]
+            if missing_columns:
+                raise ValueError(f"Отсутствуют столбцы: {missing_columns}")
 
-        return result
+            processed_data = data.copy()
+
+            # Формируем ФИО и получаем центр выдачи
+            processed_data["ФИО"] = processed_data.apply(self._combine_name, axis=1)
+            processed_data["Центр_Выдачи"] = processed_data["Список"].apply(
+                lambda x: str(x).split()[0] if pd.notna(x) else ""
+            )
+
+            # Удаляем записи с пустыми значениями
+            result = processed_data[["ФИО", "Центр_Выдачи"]].copy()
+            result = result[result["ФИО"].notna() & (result["ФИО"] != "")]
+            result = result.drop_duplicates()
+
+            print("\nОбработанные данные:")
+            print(result)
+
+            return result
+
+        except Exception as e:
+            print(f"\nОшибка при обработке данных: {str(e)}")
+            raise
 
     def save(self, data: pd.DataFrame, output_path: str) -> None:
         """Сохранение результатов в файл.
