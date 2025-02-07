@@ -26,14 +26,23 @@ class PhoneNormalizer:
     """Нормализатор телефонных номеров."""
 
     @staticmethod
-    def normalize(phone: Optional[str]) -> str:
-        """Нормализация телефонного номера в формат +7XXXXXXXXXX.
+    def normalize(phone: Optional[str]) -> str | None:
+        """Нормализация телефонного номера в формат 7XXXXXXXXXX.
+
+        Обрабатывает форматы:
+        - +79261234567
+        - +7 926 123 45 67
+        - +7 (926) 123-45-67
+        - 89261234567
+        - 8 926 123 45 67
+        - 8(926)123-45-67
+        и т.д.
 
         Args:
             phone: Строка с номером телефона
 
         Returns:
-            str: Нормализованный номер телефона или пустая строка
+            str: Нормализованный номер в формате 7XXXXXXXXXX или пустая строка
         """
         try:
             if not phone or pd.isna(phone):
@@ -44,17 +53,28 @@ class PhoneNormalizer:
             if not digits:
                 return ""
 
+            # Проверяем длину
+            if len(digits) < 10 or len(digits) > 11:
+                logger.warning("Некорректная длина номера: %s (%s)", phone, digits)
+                return ""
+
             # Нормализуем номер
-            if digits.startswith("8"):
-                digits = "7" + digits[1:]
-            elif len(digits) == 10 and digits.startswith("9"):
+            if len(digits) == 10:
+                # Если 10 цифр, добавляем 7 в начало
                 digits = "7" + digits
+            elif digits.startswith("8"):
+                # Если начинается с 8, заменяем на 7
+                digits = "7" + digits[1:]
+            elif not digits.startswith("7"):
+                # Если не начинается с 7, значит некорректный формат
+                logger.warning("Некорректный формат номера: %s (%s)", phone, digits)
+                return ""
 
-            # Проверяем финальный формат
+            # Финальная проверка
             if len(digits) == 11 and digits.startswith("7"):
-                return f"{digits}"
+                return digits
 
-            logger.warning("Некорректный формат номера: %s", phone)
+            logger.warning("Некорректный формат номера: %s (%s)", phone, digits)
             return ""
 
         except Exception as e:
