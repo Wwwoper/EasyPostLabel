@@ -65,47 +65,83 @@ class ExcelProcessor:
             FileNotFoundError: если файл не найден
             ValueError: если формат файла некорректный
         """
-        if not self.file_path.exists():
-            raise FileNotFoundError(f"Файл не найден: {self.file_path}")
-
         try:
+            if not self.file_path.exists():
+                raise FileNotFoundError(f"Файл не найден: {self.file_path}")
+
+            # Проверяем, что файл не пустой
+            if self.file_path.stat().st_size == 0:
+                raise ValueError("Файл пуст")
+
+            # Логируем путь к файлу для отладки
+            print(f"\nЧтение файла: {self.file_path}")
+
             excel_config = self.config_manager.config.get("excel", {})
-            columns_config = self.config_manager.config.get("columns", {})
+            delivery_config = self.config_manager.config.get("delivery_methods", {})
 
-            # Читаем данные через openpyxl
-            wb = load_workbook(self.file_path, data_only=True)
-            ws = wb.worksheets[excel_config.get("sheet_index", 0)]
+            if not delivery_config:
+                raise ValueError("Отсутствует конфигурация методов доставки")
 
-            # Создаем словарь для данных
-            data = []
+            # Собираем все необходимые колонки из конфигурации
+            required_columns = []
+            column_mapping = {}
 
-            # Читаем данные начиная со строки start_row
-            start_row = excel_config.get("start_row", 1)
-            for row in ws.iter_rows(min_row=start_row):
-                row_data = {}
-                for _, col_config in columns_config.items():
-                    # Получаем значение из нужной колонки (column_index начинается с 1)
-                    cell = row[col_config["column_index"] - 1]
+            # Добавляем колонку типа доставки
+            type_column = delivery_config.get("type_column", {})
+            if type_column:
+                required_columns.append(type_column["source"])
+                column_mapping[type_column["source"]] = type_column["column_index"]
 
-                    # Получаем значение в зависимости от типа ячейки
-                    row_data[col_config["source"]] = self._get_cell_value(
-                        cell, col_config
-                    )
+            # Собираем колонки для каждого типа доставки
+            for delivery_type, type_config in delivery_config.get("types", {}).items():
+                required_fields = type_config.get("required_fields", {})
 
-                data.append(row_data)
+                # Если required_fields это список
+                if isinstance(required_fields, list):
+                    for field in required_fields:
+                        required_columns.append(field["source"])
+                        column_mapping[field["source"]] = field["column_index"]
 
-            # Создаем DataFrame из списка словарей
-            self.df = pd.DataFrame(data)
+                # Если required_fields это словарь
+                elif isinstance(required_fields, dict):
+                    # Обрабатываем общие поля
+                    common_fields = required_fields.get("common", [])
+                    for field in common_fields:
+                        required_columns.append(field["source"])
+                        column_mapping[field["source"]] = field["column_index"]
 
-            # Отладочная информация
-            print("\nТипы данных столбцов:")
-            print(self.df.dtypes)
-            print("\nПервые несколько строк:")
-            print(self.df.head())
+                    # Обрабатываем поля для разных типов получателей
+                    for receiver_type, fields in required_fields.items():
+                        if receiver_type != "common" and isinstance(fields, list):
+                            for field in fields:
+                                required_columns.append(field["source"])
+                                column_mapping[field["source"]] = field["column_index"]
 
-            return self.df
+            print("\nНеобходимые колонки:", required_columns)
+            print("Маппинг колонок:", column_mapping)
+
+            # Читаем данные через pandas
+            df = pd.read_excel(
+                self.file_path,
+                sheet_name=excel_config.get("sheet_index", 0),
+                header=excel_config.get("header_row", 0),
+            )
+
+            print("\nДоступные столбцы в файле:", df.columns.tolist())
+
+            if df.empty:
+                raise ValueError("DataFrame пустой после чтения")
+
+            # Проверяем наличие необходимых столбцов
+            missing_columns = [col for col in required_columns if col not in df.columns]
+            if missing_columns:
+                raise ValueError(f"Отсутствуют обязательные столбцы: {missing_columns}")
+
+            return df
+
         except Exception as e:
-            raise ValueError(f"Ошибка чтения файла: {str(e)}") from e
+            print(f"\nОшибка при чтении файла: {str(e)}")
+            raise
 
     def process_data(self, df: pd.DataFrame | None) -> pd.DataFrame:
         """Обработка данных из Excel файла."""
