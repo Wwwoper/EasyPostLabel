@@ -43,7 +43,7 @@ class DeliveryProcessor:
         """Инициализация обработчика."""
         self.data = data
         self.config_manager = config_manager
-        self.postal_strategy = PostalDeliveryStrategy()
+        self.postal_strategy = PostalDeliveryStrategy(config_manager)
         self.pickup_strategy = PickupPointStrategy(config_manager)
         self.result = ProcessingResult(
             postal_clients=pd.DataFrame(),

@@ -4,7 +4,6 @@ import re
 from typing import Any, Dict
 
 import pandas as pd
-import logging
 
 from utils.config import ConfigManager
 
@@ -92,14 +91,14 @@ class DataValidator:
         """Проверяет входные данные на корректность"""
         if not isinstance(df, pd.DataFrame):
             raise TypeError("Входные данные должны быть DataFrame")
-        
+
         if df.empty:
             raise ValueError("DataFrame не должен быть пустым")
-            
-        required_columns = ['column1', 'column2']  # Укажите необходимые колонки
+
+        required_columns = ["column1", "column2"]  # Укажите необходимые колонки
         missing_columns = set(required_columns) - set(df.columns)
-        
+
         if missing_columns:
             raise ValueError(f"Отсутствуют обязательные колонки: {missing_columns}")
-            
+
         return True

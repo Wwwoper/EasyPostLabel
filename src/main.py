@@ -1,12 +1,11 @@
 """Основной модуль приложения для обработки данных о доставке."""
 
-import logging
 from pathlib import Path
 
 from processors.delivery_processor import DeliveryProcessor
 from processors.excel_processor import ExcelProcessor
 from utils.config import ConfigManager
-from utils.exceptions import ProcessingError, handle_exception
+from utils.exceptions import handle_exception
 from utils.logger import setup_logger
 
 # Настраиваем логирование
@@ -87,7 +86,7 @@ def main() -> None:
     except Exception as e:
         error_msg = handle_exception(e)
         logger.error("Критическая ошибка: %s", error_msg)
-        raise SystemExit(1)
+        raise SystemExit(1) from e
 
 
 if __name__ == "__main__":

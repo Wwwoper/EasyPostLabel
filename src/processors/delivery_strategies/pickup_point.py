@@ -3,7 +3,7 @@
 import datetime
 import logging
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 import pandas as pd
 from openpyxl import Workbook
@@ -25,31 +25,39 @@ class PickupPointClient:
     receiver_type: str
 
     @classmethod
-    def from_row(cls, row: pd.Series) -> Optional["PickupPointClient"]:
+    def from_row(cls, row: pd.Series, config: Dict) -> Optional["PickupPointClient"]:
         """Создание клиента из строки данных."""
         try:
             receiver_type = str(row.get("Получатель заказа", "")).strip()
-            name_fields = {
-                "Лично я": ("Фамилия", "Имя"),
-                "Другой человек": (
-                    "Фамилия получателя заказа",
-                    "Имя получателя заказа",
-                ),
-            }
 
-            fields = name_fields.get(receiver_type)
-            if not fields:
+            # Получаем конфигурацию для типа получателя
+            receiver_config = None
+            for r_type in config["receiver_types"].values():
+                if r_type["type"] == receiver_type:
+                    receiver_config = r_type
+                    break
+
+            if not receiver_config:
                 logger.warning("Неизвестный тип получателя: %s", receiver_type)
                 return None
 
-            surname = str(row.get(fields[0], "")).strip()
-            name = str(row.get(fields[1], "")).strip()
+            # Получаем имя и фамилию
+            surname = str(
+                row.get(receiver_config["name_fields"]["surname"], "")
+            ).strip()
+            name = str(row.get(receiver_config["name_fields"]["name"], "")).strip()
 
             if not surname or not name:
                 logger.warning("Пропуск: нет имени для %s", receiver_type)
                 return None
 
-            pickup_point = str(row.get("Список", "")).strip().split()[0]
+            # Получаем код пункта выдачи
+            pickup_config = config["pickup_point"]
+            pickup_raw = str(row.get(pickup_config["source_column"], "")).strip()
+            pickup_point = pickup_raw.split(pickup_config["split_by"])[
+                pickup_config["position"]
+            ]
+
             if not pickup_point:
                 logger.warning("Пропуск: нет центра выдачи")
                 return None
@@ -73,7 +81,7 @@ class PickupPointStrategy(DeliveryStrategy):
 
     def __init__(self, config_manager: ConfigManager) -> None:
         """Инициализация стратегии."""
-        self.config_manager = config_manager
+        self.config = config_manager.config["delivery_methods"]["types"]["Центр_Выдачи"]
 
     def _create_styles(self, workbook: Workbook) -> Tuple[NamedStyle, NamedStyle]:
         """Создание стилей для Excel."""
@@ -161,15 +169,7 @@ class PickupPointStrategy(DeliveryStrategy):
             logger.debug("Начало обработки данных пунктов выдачи")
 
             # Проверяем наличие всех нужных колонок
-            required_columns = [
-                "Получатель заказа",
-                "Список",
-                "Фамилия",
-                "Имя",
-                "Фамилия получателя заказа",
-                "Имя получателя заказа",
-            ]
-
+            required_columns = self.config["columns"]["required"]
             missing_columns = [
                 col for col in required_columns if col not in data.columns
             ]
@@ -179,48 +179,24 @@ class PickupPointStrategy(DeliveryStrategy):
             # Создаем список клиентов
             clients = []
             for _, row in data.iterrows():
-                try:
-                    receiver_type = str(row.get("Получатель заказа", "")).strip()
-
-                    if receiver_type == "Лично я":
-                        surname = str(row.get("Фамилия", "")).strip()
-                        name = str(row.get("Имя", "")).strip()
-                    else:  # Другой человек
-                        surname = str(row.get("Фамилия получателя заказа", "")).strip()
-                        name = str(row.get("Имя получателя заказа", "")).strip()
-
-                    if not surname or not name:
-                        logger.warning(
-                            "Пропуск записи: отсутствует фамилия или имя для %s",
-                            receiver_type,
-                        )
-                        continue
-
-                    pickup_point = str(row.get("Список", "")).strip().split()[0]
-
-                    clients.append(
-                        PickupPointClient(
-                            full_name=f"{surname} {name}".title(),
-                            pickup_point=pickup_point,
-                            receiver_type=receiver_type,
-                        )
-                    )
-                except Exception as e:
-                    logger.error("Ошибка обработки строки: %s", str(e))
-                    continue
+                client = PickupPointClient.from_row(row, self.config)
+                if client:
+                    clients.append(client)
 
             # Создаем DataFrame
             result = pd.DataFrame(
                 [
                     {
-                        "ФИО": client.full_name,
-                        "Центр_Выдачи": client.pickup_point,
+                        field["name"]: getattr(client, field["source"])
+                        for field in self.config["columns"]["output"]
                     }
                     for client in clients
                 ]
             )
 
-            result = result.drop_duplicates().sort_values(["Центр_Выдачи", "ФИО"])
+            result = result.drop_duplicates().sort_values(
+                [field["name"] for field in self.config["columns"]["output"]]
+            )
             return result
 
         except Exception as e:

@@ -30,6 +30,32 @@ delivery_methods:
           source: "Телефон"
           excel_column: "L"
           column_index: 12
+      columns:
+        required:
+          - "Телефон"
+          - "ФИО полностью"
+          - "Индекс отделения для получения."
+        output:
+          - name: "recipient_address"
+            source: "postal_index"
+          - name: "recipient_name"
+            source: "full_name"
+          - name: "recipient_phone"
+            source: "phone"
+          - name: "weight"
+            default: "0"
+          - name: "mail_type"
+            default: "4"
+      postal:
+        weight: "0"  # вес по умолчанию
+        mail_type: "4"  # тип почты по умолчанию
+        fields:
+          index:
+            source: "Индекс отделения для получения."
+          name:
+            source: "ФИО полностью"
+          phone:
+            source: "Телефон"
 
     Центр_Выдачи:
       title: "Центр выдачи"
@@ -71,6 +97,34 @@ delivery_methods:
             source: "Имя получателя заказа"
             excel_column: "I"
             column_index: 9
+      columns:
+        required:
+          - "Получатель заказа"
+          - "Список"
+          - "Фамилия"
+          - "Имя"
+          - "Фамилия получателя заказа"
+          - "Имя получателя заказа"
+        output:
+          - name: "ФИО"
+            source: "full_name"
+          - name: "Центр_Выдачи"
+            source: "pickup_point"
+      receiver_types:
+        self:
+          type: "Лично я"
+          name_fields:
+            surname: "Фамилия"
+            name: "Имя"
+        other:
+          type: "Другой человек"
+          name_fields:
+            surname: "Фамилия получателя заказа"
+            name: "Имя получателя заказа"
+      pickup_point:
+        source_column: "Список"
+        split_by: " "  # разделитель для получения кода центра
+        position: 0    # позиция кода центра после разделения
 
 # Настройки Excel
 excel:

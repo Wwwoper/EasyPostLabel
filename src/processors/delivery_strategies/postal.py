@@ -1,88 +1,114 @@
 """Модуль для обработки почтовых отправлений."""
 
-import pandas as pd
-from typing import Optional
-
-from processors.delivery_strategies.base import DeliveryStrategy
-from utils.normalizers import PhoneNormalizer, PostcodeNormalizer
 import logging
+from dataclasses import dataclass
+from typing import Dict, Optional
+
+import pandas as pd
+
+from utils.config import ConfigManager
+from utils.normalizers import PhoneNormalizer, PostcodeNormalizer
+from processors.delivery_strategies.base import DeliveryStrategy
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class PostalClient:
+    """Структура данных почтового клиента."""
+    postal_index: str
+    full_name: str
+    phone: str
+
+    @classmethod
+    def from_row(cls, row: pd.Series, config: Dict, normalizers: Dict) -> Optional["PostalClient"]:
+        """Создание клиента из строки данных."""
+        try:
+            # Получаем и нормализуем индекс
+            index_raw = row.get(config["postal"]["fields"]["index"]["source"])
+            postal_index = normalizers["postcode"].normalize(index_raw)
+            if not postal_index:
+                logger.warning("Пропуск: нет индекса - %s", row.get(config["postal"]["fields"]["name"]["source"]))
+                return None
+
+            # Получаем и нормализуем телефон
+            phone_raw = row.get(config["postal"]["fields"]["phone"]["source"])
+            phone = normalizers["phone"].normalize(phone_raw)
+            if not phone:
+                logger.warning("Пропуск: нет телефона - %s", row.get(config["postal"]["fields"]["name"]["source"]))
+                return None
+
+            # Получаем ФИО
+            full_name = str(row.get(config["postal"]["fields"]["name"]["source"], "")).strip()
+            if not full_name:
+                logger.warning("Пропуск: нет ФИО")
+                return None
+
+            return cls(
+                postal_index=postal_index,
+                full_name=full_name,
+                phone=phone
+            )
+
+        except Exception as e:
+            logger.error("Ошибка создания клиента: %s", str(e))
+            return None
 
 
 class PostalDeliveryStrategy(DeliveryStrategy):
     """Стратегия обработки почтовой доставки."""
 
-    HEADERS = [
-        "recipient_address",
-        "recipient_name",
-        "weight",
-        "recipient_phone",
-        "mail_type",
-    ]
-
-    COLUMN_MAPPING = {
-        "Телефон": "phone",
-        "ФИО полностью": "full_name",
-        "Индекс отделения для получения.": "postal_index"
-    }
-
-    def __init__(self):
+    def __init__(self, config_manager: ConfigManager):
         """Инициализация стратегии."""
-        self.phone_normalizer = PhoneNormalizer()
-        self.postcode_normalizer = PostcodeNormalizer()
-
-    def _create_postal_row(self, client: dict) -> Optional[list]:
-        """Создание строки для почтовой таблицы."""
-        try:
-            index = self.postcode_normalizer.normalize(client.get("postal_index"))
-            if not index:
-                logger.warning("Пропуск: нет индекса - %s", client.get("full_name"))
-                return None
-
-            phone = self.phone_normalizer.normalize(client.get("phone"))
-            if not phone:
-                logger.warning("Пропуск: нет телефона - %s", client.get("full_name"))
-                return None
-
-            return [
-                index,
-                client.get("full_name", ""),
-                "0",
-                phone,
-                "4",
-            ]
-        except Exception as e:
-            logger.error("Ошибка создания строки: %s", str(e))
-            return None
+        self.config = config_manager.config["delivery_methods"]["types"]["Почта"]
+        self.normalizers = {
+            "phone": PhoneNormalizer(),
+            "postcode": PostcodeNormalizer()
+        }
 
     def process(self, data: pd.DataFrame) -> pd.DataFrame:
         """Обработка данных о почтовой доставке."""
-        if data.empty:
-            return pd.DataFrame()
-
         try:
-            # Сначала переименовываем колонки
-            processed_data = data.rename(columns=self.COLUMN_MAPPING)
+            if data.empty:
+                return pd.DataFrame()
 
-            # Затем нормализуем данные
-            processed_data["phone"] = processed_data["phone"].apply(
-                self.phone_normalizer.normalize
-            )
-            processed_data["postal_index"] = processed_data["postal_index"].apply(
-                self.postcode_normalizer.normalize
+            logger.debug("Начало обработки почтовых данных")
+
+            # Проверяем наличие всех нужных колонок
+            required_columns = self.config["columns"]["required"]
+            missing_columns = [
+                col for col in required_columns if col not in data.columns
+            ]
+            if missing_columns:
+                raise ValueError(f"Отсутствуют колонки: {', '.join(missing_columns)}")
+
+            # Создаем список клиентов
+            clients = []
+            for _, row in data.iterrows():
+                client = PostalClient.from_row(row, self.config, self.normalizers)
+                if client:
+                    clients.append(client)
+
+            # Создаем DataFrame
+            result = pd.DataFrame(
+                [
+                    {
+                        field["name"]: (
+                            getattr(client, field["source"])
+                            if "source" in field
+                            else field["default"]
+                        )
+                        for field in self.config["columns"]["output"]
+                    }
+                    for client in clients
+                ]
             )
 
-            # Удаляем строки с пустыми значениями
-            processed_data = processed_data.dropna(
-                subset=["phone", "postal_index", "full_name"]
-            )
-
-            return processed_data
+            return result.drop_duplicates()
 
         except Exception as e:
-            logger.exception("Ошибка обработки данных: %s", str(e))
-            return pd.DataFrame()
+            logger.exception("Ошибка при обработке данных: %s", str(e))
+            raise
 
     def save(self, data: pd.DataFrame, output_path: str) -> None:
         """Сохранение результатов."""
@@ -90,15 +116,12 @@ class PostalDeliveryStrategy(DeliveryStrategy):
             return
 
         try:
-            clients = data[["postal_index", "full_name", "phone"]].to_dict("records")
-            postal_rows = [row for client in clients if (row := self._create_postal_row(client))]
-
-            if not postal_rows:
-                raise ValueError("Нет данных для сохранения после валидации")
-
-            df_postal = pd.DataFrame(postal_rows, columns=self.HEADERS)
-            df_postal.to_excel(output_path, index=False)
-            logger.info("Сохранено %d записей в %s", len(df_postal), output_path)
+            # Используем конфигурацию для сохранения
+            output_fields = self.config["columns"]["output"]
+            
+            # Сохраняем данные
+            data.to_excel(output_path, index=False)
+            logger.info("Сохранено %d записей в %s", len(data), output_path)
 
         except Exception as e:
             logger.exception("Ошибка при сохранении: %s", str(e))
