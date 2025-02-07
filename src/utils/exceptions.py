@@ -1,78 +1,80 @@
 """Модуль с исключениями приложения."""
 
 import logging
+from dataclasses import dataclass
 from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 
+@dataclass
+class ErrorDetails:
+    """Детали ошибки."""
+    message: str
+    code: str
+    details: Optional[str] = None
+
+
 class EasyPostLabelError(Exception):
     """Базовое исключение приложения."""
 
-    def __init__(self, message: str, details: Optional[str] = None):
+    def __init__(
+        self,
+        message: str,
+        code: str = "UNKNOWN_ERROR",
+        details: Optional[str] = None
+    ):
         """Инициализация исключения.
 
         Args:
             message: Основное сообщение об ошибке
+            code: Код ошибки
             details: Дополнительные детали ошибки
         """
-        logger.debug("Создание исключения EasyPostLabelError")
-        self.message = message
-        self.details = details
-        super().__init__(self.full_message)
-        logger.error("Исключение: %s", self.full_message)
-
-    @property
-    def full_message(self) -> str:
-        """Полное сообщение об ошибке."""
-        if self.details:
-            return f"{self.message} - {self.details}"
-        return self.message
+        self.error = ErrorDetails(message, code, details)
+        super().__init__(self.error.message)
+        logger.error(
+            "Исключение %s: %s [%s] %s",
+            self.__class__.__name__,
+            self.error.message,
+            self.error.code,
+            self.error.details or ""
+        )
 
 
 class ConfigError(EasyPostLabelError):
     """Ошибка конфигурации."""
 
     def __init__(self, message: str, details: Optional[str] = None):
-        """Инициализация исключения конфигурации."""
-        logger.debug("Создание исключения ConfigError")
-        super().__init__(f"Ошибка конфигурации: {message}", details)
+        super().__init__(message, "CONFIG_ERROR", details)
 
 
 class ValidationError(EasyPostLabelError):
     """Ошибка валидации данных."""
 
     def __init__(self, message: str, details: Optional[str] = None):
-        """Инициализация исключения валидации."""
-        logger.debug("Создание исключения ValidationError")
-        super().__init__(f"Ошибка валидации: {message}", details)
+        super().__init__(message, "VALIDATION_ERROR", details)
 
 
 class ProcessingError(EasyPostLabelError):
     """Ошибка обработки данных."""
 
     def __init__(self, message: str, details: Optional[str] = None):
-        """Инициализация исключения обработки."""
-        logger.debug("Создание исключения ProcessingError")
-        super().__init__(f"Ошибка обработки: {message}", details)
+        super().__init__(message, "PROCESSING_ERROR", details)
 
 
 class FileError(EasyPostLabelError):
     """Ошибка работы с файлами."""
 
     def __init__(self, message: str, details: Optional[str] = None):
-        """Инициализация исключения файловой операции."""
-        logger.debug("Создание исключения FileError")
-        super().__init__(f"Ошибка файла: {message}", details)
+        super().__init__(message, "FILE_ERROR", details)
 
 
 class DataError(EasyPostLabelError):
     """Ошибка в данных."""
 
     def __init__(self, message: str, details: Optional[str] = None):
-        """Инициализация исключения данных."""
-        logger.debug("Создание исключения DataError")
-        super().__init__(f"Ошибка данных: {message}", details)
+        super().__init__(message, "DATA_ERROR", details)
 
 
 def handle_exception(e: Exception) -> str:
@@ -85,12 +87,12 @@ def handle_exception(e: Exception) -> str:
         str: Сообщение об ошибке
     """
     try:
-        logger.debug("Обработка исключения: %s", type(e).__name__)
-        
         if isinstance(e, EasyPostLabelError):
-            logger.error(e.full_message)
-            return e.full_message
-        
+            error_msg = f"{e.error.message} [{e.error.code}]"
+            if e.error.details:
+                error_msg += f" - {e.error.details}"
+            return error_msg
+
         # Для неизвестных исключений
         error_msg = f"Неизвестная ошибка: {str(e)}"
         logger.exception(error_msg)

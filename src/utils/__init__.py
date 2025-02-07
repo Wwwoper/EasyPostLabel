@@ -1,7 +1,14 @@
-"""Пакет с утилитами."""
+"""Пакет утилит."""
 
-# Можно оставить пустым или добавить импорты для удобства
-from .config import ConfigManager, ReceiverType
-from .utils import get_client_full_name, process_dataframe
+from .config import ConfigManager
+from .constants import DeliveryType, ReceiverType
+from .paths import DEFAULT_CONFIG_PATH, DEFAULT_OUTPUT_DIR, DEFAULT_LOGS_DIR
 
-__all__ = ["ConfigManager", "ReceiverType", "get_client_full_name", "process_dataframe"]
+__all__ = [
+    'ConfigManager',
+    'DeliveryType',
+    'ReceiverType',
+    'DEFAULT_CONFIG_PATH',
+    'DEFAULT_OUTPUT_DIR',
+    'DEFAULT_LOGS_DIR'
+]

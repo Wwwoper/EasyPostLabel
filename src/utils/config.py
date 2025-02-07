@@ -1,12 +1,15 @@
-"""Менеджер конфигурации."""
+"""Модуль управления конфигурацией."""
 
+import logging
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, Optional, TypedDict, cast
 
 import yaml
 
-from .constants import DEFAULT_CONFIG_PATH
+from .paths import DEFAULT_CONFIG_PATH
+
+logger = logging.getLogger(__name__)
 
 
 class ExcelConfig(TypedDict):
@@ -53,22 +56,17 @@ class ReceiverType(Enum):
 class ConfigManager:
     """Менеджер конфигурации."""
 
-    def __init__(self, config_path: Optional[Path] = None) -> None:
-        """Инициализация менеджера конфигурации.
-
-        Args:
-            config_path: Путь к конфигурационному файлу
-        """
+    def __init__(self, config_path: Optional[Path] = None):
+        """Инициализация менеджера конфигурации."""
         self.config_path = config_path or DEFAULT_CONFIG_PATH
-        self.config: Dict[str, Any] = {}
-        self.load_config()
+        self.config = self._load_config()
 
-    def load_config(self) -> None:
+    def _load_config(self) -> Dict[str, Any]:
         """Загрузка конфигурации из YAML файла."""
         try:
             with open(self.config_path, "r", encoding="utf-8") as f:
                 loaded_config = yaml.safe_load(f)
-                self.config = cast(Dict[str, Any], loaded_config or {})
+                return cast(Dict[str, Any], loaded_config or {})
         except Exception as e:
             raise ValueError(f"Ошибка загрузки конфигурации: {str(e)}") from e
 
@@ -183,3 +181,21 @@ class ConfigManager:
         except Exception as e:
             logger.error("Ошибка при получении шаблона вывода: %s", str(e))
             raise
+
+    def get_setting(self, path: str, default: Any = None) -> Any:
+        """Получение настройки по пути.
+
+        Args:
+            path: Путь к настройке (через точку)
+            default: Значение по умолчанию
+
+        Returns:
+            Any: Значение настройки
+        """
+        try:
+            value = self.config
+            for key in path.split('.'):
+                value = value[key]
+            return value
+        except (KeyError, TypeError):
+            return default

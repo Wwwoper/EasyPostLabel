@@ -29,35 +29,35 @@ class PickupPointClient:
         """Создание клиента из строки данных."""
         try:
             receiver_type = str(row.get("Получатель заказа", "")).strip()
-            
-            # Определяем ФИО в зависимости от типа получателя
-            if receiver_type == "Лично я":
-                surname = str(row.get("Фамилия", "")).strip()
-                name = str(row.get("Имя", "")).strip()
-            else:  # Другой человек
-                surname = str(row.get("Фамилия получателя заказа", "")).strip()
-                name = str(row.get("Имя получателя заказа", "")).strip()
+            name_fields = {
+                "Лично я": ("Фамилия", "Имя"),
+                "Другой человек": (
+                    "Фамилия получателя заказа",
+                    "Имя получателя заказа",
+                ),
+            }
 
-            # Проверяем наличие данных
+            fields = name_fields.get(receiver_type)
+            if not fields:
+                logger.warning("Неизвестный тип получателя: %s", receiver_type)
+                return None
+
+            surname = str(row.get(fields[0], "")).strip()
+            name = str(row.get(fields[1], "")).strip()
+
             if not surname or not name:
-                logger.warning(
-                    "Пропуск записи: отсутствует фамилия или имя для %s", receiver_type
-                )
+                logger.warning("Пропуск: нет имени для %s", receiver_type)
                 return None
 
-            # Получаем центр выдачи
-            pickup_point = str(row.get("Список", "")).strip()
+            pickup_point = str(row.get("Список", "")).strip().split()[0]
             if not pickup_point:
-                logger.warning("Пропуск записи: не указан центр выдачи")
+                logger.warning("Пропуск: нет центра выдачи")
                 return None
-
-            # Берем только название центра выдачи (первое слово)
-            pickup_point = pickup_point.split()[0]
 
             return cls(
                 full_name=f"{surname} {name}".title(),
                 pickup_point=pickup_point,
-                receiver_type=receiver_type
+                receiver_type=receiver_type,
             )
 
         except Exception as e:
@@ -159,7 +159,7 @@ class PickupPointStrategy(DeliveryStrategy):
                 return pd.DataFrame()
 
             logger.debug("Начало обработки данных пунктов выдачи")
-            
+
             # Проверяем наличие всех нужных колонок
             required_columns = [
                 "Получатель заказа",
@@ -169,8 +169,10 @@ class PickupPointStrategy(DeliveryStrategy):
                 "Фамилия получателя заказа",
                 "Имя получателя заказа",
             ]
-            
-            missing_columns = [col for col in required_columns if col not in data.columns]
+
+            missing_columns = [
+                col for col in required_columns if col not in data.columns
+            ]
             if missing_columns:
                 raise ValueError(f"Отсутствуют колонки: {', '.join(missing_columns)}")
 
@@ -179,7 +181,7 @@ class PickupPointStrategy(DeliveryStrategy):
             for _, row in data.iterrows():
                 try:
                     receiver_type = str(row.get("Получатель заказа", "")).strip()
-                    
+
                     if receiver_type == "Лично я":
                         surname = str(row.get("Фамилия", "")).strip()
                         name = str(row.get("Имя", "")).strip()
@@ -195,7 +197,7 @@ class PickupPointStrategy(DeliveryStrategy):
                         continue
 
                     pickup_point = str(row.get("Список", "")).strip().split()[0]
-                    
+
                     clients.append(
                         PickupPointClient(
                             full_name=f"{surname} {name}".title(),
@@ -208,13 +210,15 @@ class PickupPointStrategy(DeliveryStrategy):
                     continue
 
             # Создаем DataFrame
-            result = pd.DataFrame([
-                {
-                    "ФИО": client.full_name,
-                    "Центр_Выдачи": client.pickup_point,
-                }
-                for client in clients
-            ])
+            result = pd.DataFrame(
+                [
+                    {
+                        "ФИО": client.full_name,
+                        "Центр_Выдачи": client.pickup_point,
+                    }
+                    for client in clients
+                ]
+            )
 
             result = result.drop_duplicates().sort_values(["Центр_Выдачи", "ФИО"])
             return result

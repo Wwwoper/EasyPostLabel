@@ -1,15 +1,33 @@
 """Обработчик Excel файлов."""
 
 from pathlib import Path
-from typing import Any, Set, Tuple
+from typing import Any, Set, Tuple, List, Optional
 
 import pandas as pd
 from openpyxl import load_workbook
 from openpyxl.cell import Cell
+import logging
+from dataclasses import dataclass
 
 from utils.config import ConfigManager
 from utils.utils import get_client_full_name
 
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class PostalClient:
+    """Данные почтового клиента."""
+    name: str
+    delivery: str
+    address: int
+    phone: int
+
+@dataclass
+class PickupClient:
+    """Данные клиента центра выдачи."""
+    name: str
+    delivery: str
 
 class ExcelProcessor:
     """Обработчик Excel файлов."""
@@ -56,143 +74,124 @@ class ExcelProcessor:
         return str(value) if value is not None else ""
 
     def read_data(self) -> pd.DataFrame:
-        """Чтение данных из Excel файла.
-
-        Returns:
-            pd.DataFrame: данные из файла
-
-        Raises:
-            FileNotFoundError: если файл не найден
-            ValueError: если формат файла некорректный
-        """
+        """Чтение данных из Excel файла."""
         try:
             if not self.file_path.exists():
                 raise FileNotFoundError(f"Файл не найден: {self.file_path}")
 
-            # Проверяем, что файл не пустой
             if self.file_path.stat().st_size == 0:
                 raise ValueError("Файл пуст")
 
-            # Логируем путь к файлу для отладки
-            print(f"\nЧтение файла: {self.file_path}")
+            logger.debug("Чтение файла: %s", self.file_path)
 
+            # Получаем конфигурацию
             excel_config = self.config_manager.config.get("excel", {})
-            delivery_config = self.config_manager.config.get("delivery_methods", {})
+            required_columns = self._get_required_columns()
 
-            if not delivery_config:
-                raise ValueError("Отсутствует конфигурация методов доставки")
-
-            # Собираем все необходимые колонки из конфигурации
-            required_columns = []
-            column_mapping = {}
-
-            # Добавляем колонку типа доставки
-            type_column = delivery_config.get("type_column", {})
-            if type_column:
-                required_columns.append(type_column["source"])
-                column_mapping[type_column["source"]] = type_column["column_index"]
-
-            # Собираем колонки для каждого типа доставки
-            for delivery_type, type_config in delivery_config.get("types", {}).items():
-                required_fields = type_config.get("required_fields", {})
-
-                # Если required_fields это список
-                if isinstance(required_fields, list):
-                    for field in required_fields:
-                        required_columns.append(field["source"])
-                        column_mapping[field["source"]] = field["column_index"]
-
-                # Если required_fields это словарь
-                elif isinstance(required_fields, dict):
-                    # Обрабатываем общие поля
-                    common_fields = required_fields.get("common", [])
-                    for field in common_fields:
-                        required_columns.append(field["source"])
-                        column_mapping[field["source"]] = field["column_index"]
-
-                    # Обрабатываем поля для разных типов получателей
-                    for receiver_type, fields in required_fields.items():
-                        if receiver_type != "common" and isinstance(fields, list):
-                            for field in fields:
-                                required_columns.append(field["source"])
-                                column_mapping[field["source"]] = field["column_index"]
-
-            print("\nНеобходимые колонки:", required_columns)
-            print("Маппинг колонок:", column_mapping)
-
-            # Читаем данные через pandas
+            # Читаем данные
             df = pd.read_excel(
                 self.file_path,
                 sheet_name=excel_config.get("sheet_index", 0),
                 header=excel_config.get("header_row", 0),
             )
 
-            print("\nДоступные столбцы в файле:", df.columns.tolist())
-
             if df.empty:
                 raise ValueError("DataFrame пустой после чтения")
 
-            # Проверяем наличие необходимых столбцов
+            # Проверяем колонки
             missing_columns = [col for col in required_columns if col not in df.columns]
             if missing_columns:
-                raise ValueError(f"Отсутствуют обязательные столбцы: {missing_columns}")
+                raise ValueError(f"Отсутствуют колонки: {missing_columns}")
 
             return df
 
         except Exception as e:
-            print(f"\nОшибка при чтении файла: {str(e)}")
+            logger.exception("Ошибка чтения файла: %s", str(e))
             raise
+
+    def _get_required_columns(self) -> list[str]:
+        """Получение списка необходимых колонок."""
+        delivery_config = self.config_manager.config.get("delivery_methods", {})
+        
+        columns = []
+        # Добавляем колонку типа доставки
+        type_column = delivery_config.get("type_column", {})
+        if type_column:
+            columns.append(type_column["source"])
+
+        # Добавляем колонки для каждого типа доставки
+        for type_config in delivery_config.get("types", {}).values():
+            fields = type_config.get("required_fields", {})
+            if isinstance(fields, list):
+                columns.extend(f["source"] for f in fields)
+            elif isinstance(fields, dict):
+                for field_list in fields.values():
+                    if isinstance(field_list, list):
+                        columns.extend(f["source"] for f in field_list)
+
+        return list(set(columns))  # Убираем дубликаты
+
+    def _create_postal_client(self, row: pd.Series) -> Optional[PostalClient]:
+        """Создание почтового клиента из строки данных."""
+        try:
+            return PostalClient(
+                name=get_client_full_name(row, self.config_manager),
+                delivery=row["Список"],
+                address=int(float(row["только Индекс отделения для получения."])),
+                phone=int(float(row["Телефон"]))
+            )
+        except Exception as e:
+            logger.error("Ошибка создания почтового клиента: %s", str(e))
+            return None
+
+    def _create_pickup_client(self, row: pd.Series) -> Optional[PickupClient]:
+        """Создание клиента центра выдачи из строки данных."""
+        try:
+            return PickupClient(
+                name=get_client_full_name(row, self.config_manager),
+                delivery=row["Список"].split()[0]
+            )
+        except Exception as e:
+            logger.error("Ошибка создания клиента центра выдачи: %s", str(e))
+            return None
 
     def process_data(self, df: pd.DataFrame | None) -> pd.DataFrame:
         """Обработка данных из Excel файла."""
         if df is None or df.empty:
             return pd.DataFrame()
 
-        # Создаем множества для хранения уникальных записей
-        postal_clients_set: Set[Tuple] = set()
-        other_clients_set: Set[Tuple] = set()
+        postal_clients: List[PostalClient] = []
+        pickup_clients: List[PickupClient] = []
 
-        # Обрабатываем каждую строку
         for _, row in df.iterrows():
-            client_name = get_client_full_name(row, self.config_manager)
-            delivery_value = row["Список"]
-
-            # Определяем способ доставки
-            delivery = (
-                delivery_value
-                if "Почта" in delivery_value
-                else delivery_value.split()[0]
-            )
-
-            if "Почта" in delivery_value:
-                # Преобразуем адрес и телефон в целые числа
-                postal_address = int(
-                    float(row["только Индекс отделения для получения."])
-                )
-                phone = int(float(row["Телефон"]))
-
-                # Создаем кортеж для уникальной идентификации записи
-                postal_record = (client_name, delivery, postal_address, phone)
-                postal_clients_set.add(postal_record)
+            if "Почта" in row["Список"]:
+                if client := self._create_postal_client(row):
+                    postal_clients.append(client)
             else:
-                # Создаем кортеж для уникальной идентификации записи
-                other_record = (client_name, delivery)
-                other_clients_set.add(other_record)
+                if client := self._create_pickup_client(row):
+                    pickup_clients.append(client)
 
-        # Преобразуем множества обратно в списки словарей
-        postal_clients = [
+        # Создаем DataFrame из обработанных данных
+        result_data = []
+        
+        # Добавляем почтовых клиентов
+        result_data.extend([
             {
-                "ФИО": record[0],
-                "Способ доставки": record[1],
-                "Адрес": record[2],
-                "Телефон": record[3],
+                "ФИО": client.name,
+                "Способ доставки": client.delivery,
+                "Адрес": client.address,
+                "Телефон": client.phone
             }
-            for record in postal_clients_set
-        ]
+            for client in postal_clients
+        ])
 
-        other_clients = [
-            {"ФИО": record[0], "Способ доставки": record[1]}
-            for record in other_clients_set
-        ]
+        # Добавляем клиентов центров выдачи
+        result_data.extend([
+            {
+                "ФИО": client.name,
+                "Способ доставки": client.delivery
+            }
+            for client in pickup_clients
+        ])
 
-        return pd.DataFrame(postal_clients + other_clients)
+        return pd.DataFrame(result_data).drop_duplicates()

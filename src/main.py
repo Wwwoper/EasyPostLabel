@@ -1,100 +1,93 @@
 """Основной модуль приложения для обработки данных о доставке."""
 
 import logging
-import sys
 from pathlib import Path
 
-import pandas as pd
+from processors.delivery_processor import DeliveryProcessor
+from processors.excel_processor import ExcelProcessor
+from utils.config import ConfigManager
+from utils.exceptions import ProcessingError, handle_exception
+from utils.logger import setup_logger
 
-# Добавляем путь к src в PYTHONPATH
-sys.path.append(str(Path(__file__).parent / "src"))
-
-# Все импорты после добавления пути
-from processors.delivery_processor import DeliveryProcessor  # noqa: E402
-from processors.excel_processor import ExcelProcessor  # noqa: E402
-from utils.config import ConfigManager  # noqa: E402
-
-
-def validate_dataframe(df):
-    """Проверяет DataFrame на наличие данных и колонок.
-
-    Args:
-        df (pd.DataFrame): DataFrame для проверки
-
-    Raises:
-        ValueError: Если DataFrame пустой или не содержит колонок
-    """
-    if df.empty or len(df.columns) == 0:
-        raise ValueError(
-            "DataFrame пустой или не содержит колонок. Проверьте входные данные."
-        )
+# Настраиваем логирование
+logger = setup_logger(__name__, level="development")
 
 
-def load_data(file_path):
-    """Загружает данные из файла в DataFrame.
-
-    Args:
-        file_path (str или Path): Путь к файлу с данными
+def setup_environment() -> tuple[Path, ConfigManager]:
+    """Настройка окружения приложения.
 
     Returns:
-        pd.DataFrame: Загруженные данные
+        tuple: (путь к входному файлу, менеджер конфигурации)
 
     Raises:
-        Exception: При ошибке загрузки или валидации данных
+        FileNotFoundError: если входной файл не найден
+    """
+    input_file = Path("files/new_file.xlsx")
+    if not input_file.exists():
+        raise FileNotFoundError(f"Файл не найден: {input_file}")
+
+    config = ConfigManager()
+    logger.info("Окружение настроено успешно")
+    return input_file, config
+
+
+def process_delivery_data(input_file: Path, config: ConfigManager) -> bool:
+    """Обработка данных о доставке.
+
+    Args:
+        input_file: Путь к входному файлу
+        config: Менеджер конфигурации
+
+    Returns:
+        bool: Успешность обработки
     """
     try:
-        if str(file_path).endswith(".csv"):
-            df = pd.read_csv(file_path)
-        elif str(file_path).endswith(".xlsx"):
-            df = pd.read_excel(file_path)
-        else:
-            raise ValueError(
-                "Неподдерживаемый формат файла. Используйте .csv или .xlsx"
-            )
+        logger.info("Начало обработки файла: %s", input_file)
 
-        validate_dataframe(df)
-        return df
+        # Читаем данные
+        excel_processor = ExcelProcessor(input_file, config)
+        df = excel_processor.read_data()
+
+        if df.empty:
+            logger.warning("Нет данных для обработки")
+            return False
+
+        # Обрабатываем данные
+        processor = DeliveryProcessor(df, config)
+        result = processor.process()
+
+        if not result.success:
+            logger.error("Ошибка обработки: %s", result.error)
+            return False
+
+        # Сохраняем результаты
+        if processor.save_results():
+            logger.info("Статистика обработки: %s", result.stats)
+            return True
+
+        return False
+
     except Exception as e:
-        logging.error(f"Ошибка при загрузке данных: {str(e)}")
-        raise
+        logger.exception("Ошибка обработки: %s", str(e))
+        return False
 
 
 def main() -> None:
     """Основная функция приложения."""
     try:
-        # Инициализируем конфигурацию
-        config = ConfigManager()
+        # Инициализация
+        input_file, config = setup_environment()
 
-        # Создаем процессор Excel и читаем данные
-        input_file = Path("files/new_file.xlsx")
-
-        # Выводим абсолютный путь для отладки
-        abs_path = input_file.absolute()
-        print(f"\nПуть к файлу: {abs_path}")
-        print(f"Файл существует: {input_file.exists()}")
-
-        if not input_file.exists():
-            raise FileNotFoundError(f"Файл {input_file} не найден")
-
-        excel_processor = ExcelProcessor(input_file, config)
-        df = excel_processor.read_data()
-
-        if df.empty:
-            print("\nПредупреждение: DataFrame пустой")
-            return
-
-        # Создаем процессор доставки
-        delivery_processor = DeliveryProcessor(df, config)
-
-        # Обрабатываем данные
-        delivery_processor.process()
-
-        # Сохраняем результаты
-        delivery_processor.save_results()
+        # Обработка
+        if process_delivery_data(input_file, config):
+            logger.info("Программа завершена успешно")
+        else:
+            logger.error("Программа завершена с ошибками")
 
     except Exception as e:
-        print(f"Произошла ошибка: {str(e)}")
-        sys.exit(1)
+        error_msg = handle_exception(e)
+        logger.error("Критическая ошибка: %s", error_msg)
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

@@ -1,30 +1,55 @@
 """Обработчик данных о способах доставки."""
 
+import logging
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
 import pandas as pd
 
 from utils.config import ConfigManager
-from utils.constants import DEFAULT_OUTPUT_DIR
-
+from utils.paths import DEFAULT_OUTPUT_DIR
+from utils.exceptions import ProcessingError
 from .delivery_strategies.pickup_point import PickupPointStrategy
 from .delivery_strategies.postal import PostalDeliveryStrategy
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ProcessingResult:
+    """Результаты обработки данных."""
+    postal_clients: pd.DataFrame
+    pickup_clients: pd.DataFrame
+    success: bool
+    error: Optional[str] = None
+    stats: Dict[str, int] = None
+
+    def __post_init__(self):
+        """Инициализация статистики."""
+        if self.stats is None:
+            self.stats = {
+                "total": 0,
+                "postal": 0,
+                "pickup": 0,
+                "errors": 0
+            }
 
 
 class DeliveryProcessor:
     """Обработчик данных о способах доставки."""
 
     def __init__(self, data: pd.DataFrame, config_manager: ConfigManager) -> None:
-        """Инициализация обработчика данных о способах доставки.
-
-        Args:
-            data: DataFrame с исходными данными
-            config_manager: Менеджер конфигурации
-        """
+        """Инициализация обработчика."""
         self.data = data
         self.config_manager = config_manager
         self.postal_strategy = PostalDeliveryStrategy()
         self.pickup_strategy = PickupPointStrategy(config_manager)
-        self.postal_clients = pd.DataFrame()
-        self.pickup_clients = pd.DataFrame()
+        self.result = ProcessingResult(
+            postal_clients=pd.DataFrame(),
+            pickup_clients=pd.DataFrame(),
+            success=False
+        )
 
     def _validate_postal_data(self, data: pd.DataFrame) -> bool:
         """Проверка наличия необходимых полей для почтовой доставки.
@@ -42,97 +67,100 @@ class DeliveryProcessor:
         ]
         return all(field in data.columns for field in required_fields)
 
-    def process(self) -> None:
-        """Обработка данных о способах доставки."""
+    def _validate_delivery_column(self) -> Tuple[bool, Optional[str]]:
+        """Проверка столбца способа доставки."""
         try:
-            if self.data.empty:
-                print("\nПредупреждение: Нет данных для обработки")
-                return
-
-            # Получаем конфигурацию для поля delivery_method
             delivery_config = self.config_manager.config.get("delivery_methods", {})
             type_column = delivery_config.get("type_column", {})
             delivery_column = type_column.get("source")
 
             if not delivery_column or delivery_column not in self.data.columns:
-                raise ValueError(
-                    f"Отсутствует столбец способа доставки: {delivery_column}"
-                )
+                return False, f"Отсутствует столбец способа доставки: {delivery_column}"
 
-            # Преобразуем столбец в строковый тип
             self.data[delivery_column] = self.data[delivery_column].astype(str)
-
-            # Получаем конфигурацию для почтовой доставки
-            postal_config = delivery_config.get("types", {}).get("Почта", {})
-            postal_fields = postal_config.get("required_fields", [])
-
-            # Получаем маппинг полей для почты
-            postal_field_mapping = {
-                field["field"]: field["source"] for field in postal_fields
-            }
-
-            # Разделение клиентов по способу доставки
-            postal_mask = self.data[delivery_column].str.contains(
-                "Почта", case=False, na=False
-            )
-
-            # Обработка почтовых клиентов
-            postal_data = self.data[postal_mask].copy()
-            if not postal_data.empty:
-                print("\nПочтовые данные до обработки:")
-                print(
-                    postal_data[
-                        ["Индекс отделения для получения.", "ФИО полностью", "Телефон"]
-                    ].head()
-                )
-
-                # Проверяем наличие необходимых колонок
-                required_columns = [
-                    postal_field_mapping["postal_index"],
-                    postal_field_mapping["full_name"],
-                    postal_field_mapping["phone"],
-                ]
-
-                missing_columns = [
-                    col for col in required_columns if col not in postal_data.columns
-                ]
-
-                if missing_columns:
-                    print(
-                        f"\nОтсутствуют обязательные колонки для почты: {missing_columns}"
-                    )
-                else:
-                    # Переименовываем колонки в соответствии с маппингом
-                    column_mapping = {v: k for k, v in postal_field_mapping.items()}
-                    postal_data = postal_data.rename(columns=column_mapping)
-
-                    print("\nПочтовые данные после переименования:")
-                    print(postal_data[["postal_index", "full_name", "phone"]].head())
-
-                    self.postal_clients = self.postal_strategy.process(postal_data)
-
-                    # Отладочная информация с новыми именами колонок
-                    print(f"\nНайдено почтовых клиентов: {len(self.postal_clients)}")
-                    print(
-                        f"Найдено клиентов центров выдачи: {len(self.pickup_clients)}"
-                    )
-
-                    if not self.postal_clients.empty:
-                        print("\nПримеры почтовых клиентов:")
-                        print(self.postal_clients[["full_name", "phone"]].head())
-            else:
-                print("\nНет данных для почтовой доставки")
-
-            # Обработка клиентов центров выдачи
-            pickup_data = self.data[~postal_mask].copy()
-            if not pickup_data.empty:
-                self.pickup_clients = self.pickup_strategy.process(pickup_data)
+            return True, None
 
         except Exception as e:
-            print(f"Ошибка при обработке данных: {str(e)}")
-            raise
+            return False, str(e)
 
-    def save_results(self) -> None:
+    def _split_clients(self, delivery_column: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        """Разделение клиентов по способу доставки."""
+        postal_mask = self.data[delivery_column].str.contains("Почта", case=False, na=False)
+        return self.data[postal_mask].copy(), self.data[~postal_mask].copy()
+
+    def _process_postal_clients(self, data: pd.DataFrame) -> pd.DataFrame:
+        """Обработка почтовых клиентов."""
+        try:
+            if data.empty:
+                return pd.DataFrame()
+
+            logger.info("Начало обработки почтовых клиентов")
+            result = self.postal_strategy.process(data)
+            
+            if not result.empty:
+                self.result.stats["postal"] = len(result)
+                logger.info("Обработано почтовых клиентов: %d", len(result))
+            
+            return result
+
+        except Exception as e:
+            self.result.stats["errors"] += 1
+            logger.exception("Ошибка обработки почтовых клиентов: %s", str(e))
+            raise ProcessingError("Ошибка обработки почтовых клиентов") from e
+
+    def _process_pickup_clients(self, data: pd.DataFrame) -> pd.DataFrame:
+        """Обработка клиентов центров выдачи."""
+        try:
+            if data.empty:
+                return pd.DataFrame()
+
+            logger.info("Начало обработки клиентов центров выдачи")
+            result = self.pickup_strategy.process(data)
+            
+            if not result.empty:
+                self.result.stats["pickup"] = len(result)
+                logger.info("Обработано клиентов центров выдачи: %d", len(result))
+            
+            return result
+
+        except Exception as e:
+            self.result.stats["errors"] += 1
+            logger.exception("Ошибка обработки клиентов центров выдачи: %s", str(e))
+            raise ProcessingError("Ошибка обработки клиентов центров выдачи") from e
+
+    def process(self) -> ProcessingResult:
+        """Обработка данных о способах доставки."""
+        try:
+            if self.data.empty:
+                raise ProcessingError("Нет данных для обработки")
+
+            # Проверяем столбец доставки
+            valid, error = self._validate_delivery_column()
+            if not valid:
+                raise ProcessingError(error or "Ошибка валидации столбца доставки")
+
+            # Разделяем и обрабатываем клиентов
+            postal_data, pickup_data = self._split_clients(
+                self.config_manager.config["delivery_methods"]["type_column"]["source"]
+            )
+
+            # Обрабатываем данные
+            self.result.postal_clients = self._process_postal_clients(postal_data)
+            self.result.pickup_clients = self._process_pickup_clients(pickup_data)
+
+            # Обновляем статистику
+            self.result.stats["total"] = len(self.data)
+            self.result.success = True
+
+            logger.info("Обработка завершена успешно. Статистика: %s", self.result.stats)
+            return self.result
+
+        except Exception as e:
+            self.result.error = str(e)
+            logger.exception("Ошибка обработки данных: %s", str(e))
+            return self.result
+
+    def save_results(self) -> bool:
         """Сохранение результатов в файлы.
 
         Raises:
@@ -151,26 +179,19 @@ class DeliveryProcessor:
             if not output_templates:
                 raise ValueError("Отсутствует конфигурация шаблонов вывода")
 
-            # Сохранение почтовых клиентов
-            postal_template = output_templates.get("postal", {})
-            if not self.postal_clients.empty:
-                if "filename" not in postal_template:
-                    raise ValueError("Не указано имя файла для почтовых клиентов")
+            # Сохраняем результаты
+            if not self.result.postal_clients.empty:
+                output_path = DEFAULT_OUTPUT_DIR / output_templates["postal"]["filename"]
+                self.postal_strategy.save(self.result.postal_clients, str(output_path))
+                logger.info("Сохранены почтовые клиенты: %s", output_path)
 
-                output_path = DEFAULT_OUTPUT_DIR / postal_template["filename"]
-                print(f"\nСохранение почтовых клиентов в {output_path}")
-                self.postal_strategy.save(self.postal_clients, str(output_path))
+            if not self.result.pickup_clients.empty:
+                output_path = DEFAULT_OUTPUT_DIR / output_templates["pickup_point"]["filename"]
+                self.pickup_strategy.save(self.result.pickup_clients, str(output_path))
+                logger.info("Сохранены клиенты центров выдачи: %s", output_path)
 
-            # Сохранение клиентов центров выдачи
-            pickup_template = output_templates.get("pickup_point", {})
-            if not self.pickup_clients.empty:
-                if "filename" not in pickup_template:
-                    raise ValueError("Не указано имя файла для клиентов центров выдачи")
-
-                output_path = DEFAULT_OUTPUT_DIR / pickup_template["filename"]
-                print(f"Сохранение клиентов центров выдачи в {output_path}")
-                self.pickup_strategy.save(self.pickup_clients, str(output_path))
+            return True
 
         except Exception as e:
-            print(f"\nОшибка при сохранении результатов: {str(e)}")
-            raise
+            logger.exception("Ошибка сохранения результатов: %s", str(e))
+            return False

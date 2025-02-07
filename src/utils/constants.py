@@ -1,25 +1,53 @@
-"""Константы."""
+"""Константы приложения."""
 
 from enum import Enum
-from pathlib import Path
+from typing import Dict, Final
+
+# Файлы
+class FileNames(str, Enum):
+    """Имена файлов."""
+    POSTAL = "postal.xlsx"
+    LABELS = "labels.xlsx"
+    CONFIG = "config.yaml"
 
 
-class DeliveryType(Enum):
+# Типы доставки
+class DeliveryType(str, Enum):
     """Типы доставки."""
+    POSTAL = "Почта"
+    PICKUP = "Центр_Выдачи"
 
-    POSTAL = "почта"
-    OTHER = "other"
+
+# Типы получателей
+class ReceiverType(str, Enum):
+    """Типы получателей."""
+    SELF = "Лично я"
+    OTHER = "Другой человек"
 
 
-# Пути к файлам
-DEFAULT_CONFIG_PATH = Path("config/config.yaml")
-DEFAULT_OUTPUT_DIR = Path("output")
+# Коды ошибок
+class ErrorCode(str, Enum):
+    """Коды ошибок."""
+    CONFIG = "CONFIG_ERROR"
+    VALIDATION = "VALIDATION_ERROR"
+    PROCESSING = "PROCESSING_ERROR"
+    FILE = "FILE_ERROR"
+    DATA = "DATA_ERROR"
+    UNKNOWN = "UNKNOWN_ERROR"
 
-# Названия выходных файлов
-POSTAL_CLIENTS_FILENAME = "postal_clients.xlsx"
-ALTERNATIVE_CLIENTS_FILENAME = "alternative_clients.xlsx"
 
 # Ключи конфигурации
-CONFIG_COLUMNS_KEY = "columns"
-CONFIG_OUTPUT_KEY = "output"
-CONFIG_VALIDATION_KEY = "validation"
+class ConfigKey(str, Enum):
+    """Ключи конфигурации."""
+    COLUMNS = "columns"
+    OUTPUT = "output"
+    VALIDATION = "validation"
+    DELIVERY_METHODS = "delivery_methods"
+    EXCEL = "excel"
+
+
+# Форматы файлов
+SUPPORTED_FORMATS: Final[Dict[str, str]] = {
+    "excel": ".xlsx",
+    "csv": ".csv"
+}
