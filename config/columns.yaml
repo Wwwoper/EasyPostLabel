@@ -1,0 +1,50 @@
+# Колонки для почтовой доставки
+postal_columns:
+  full_name:
+    source: "ФИО полностью"
+    excel_column: "J"
+    column_index: 10
+
+  postal_address:
+    source: "только Индекс отделения для получения."
+    excel_column: "K"
+    column_index: 11
+
+  phone:
+    source: "Телефон"
+    excel_column: "L"
+    column_index: 12
+
+# Колонки для доставки PickPoint
+pickpoint_columns:
+  receiver:
+    type:
+      source: "Кто будет получать заказ"
+      excel_column: "B"
+      column_index: 2
+    
+    self:
+      surname:
+        source: "Фамилия"
+        excel_column: "C"
+        column_index: 3
+      name:
+        source: "Имя"
+        excel_column: "D"
+        column_index: 4
+
+    other:
+      surname:
+        source: "Фамилия получателя заказа"
+        excel_column: "G"
+        column_index: 7
+      name:
+        source: "Имя получателя заказа"
+        excel_column: "H"
+        column_index: 8
+
+  delivery:
+    method:
+      source: "Список"
+      excel_column: "M"
+      column_index: 13

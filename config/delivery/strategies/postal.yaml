@@ -1,0 +1,24 @@
+delivery_strategies:
+  postal:
+    output:
+      filename: "Почта.xlsx"
+      columns:
+        - recipient_address
+        - recipient_name
+        - weight
+        - recipient_phone
+        - mail_type
+
+    required_fields:  # Обязательные поля во входном файле файле
+      - client_name
+      - postal_code
+      - phone
+    field_mapping:    # маппинг полей на названия колонки в файле
+      client_name: "ФИО полностью"
+      postal_code: "Индекс отделения для получения."
+      phone: "Телефон"
+    validation:
+      postal_code:
+        pattern: "^\\d{6}$"
+      delivery_method:
+        contains: "Почта"

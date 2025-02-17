@@ -1,0 +1,9 @@
+# Реестр стратегий доставки
+strategy_mapping:
+  alternative: "pickpoint"  # Для обратной совместимости
+  pickpoint: "pickpoint"
+  postal: "postal"
+
+enabled_strategies:
+  - postal
+  - pickpoint 

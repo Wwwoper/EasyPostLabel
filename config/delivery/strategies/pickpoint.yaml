@@ -1,0 +1,43 @@
+delivery_strategies:
+  pickpoint:
+    # Определяем когда используется эта стратегия
+    validation:
+      delivery_method:
+        contains: "Центр_Выдачи"
+        first_word: true
+
+    # Настройки получателей
+    receivers:
+      types:
+        self: "Лично я"
+        other: "Другой человек"
+      fields:
+        "Лично я":
+          required_fields:
+            - surname_field: "Фамилия"
+            - name_field: "Имя"
+          output_name: "{surname} {name}"  # Шаблон для формирования ФИО
+        "Другой человек":
+          required_fields:
+            - surname_field: "Фамилия получателя заказа"
+            - name_field: "Имя получателя заказа"
+          output_name: "{surname} {name}"  # Шаблон для формирования ФИО
+
+    # Общие обязательные поля
+    required_fields:
+      - delivery_method
+      - pickpoint_name
+      - receiver_type  # Тип получателя (Лично я/Другой человек)
+
+    # Маппинг полей входного файла
+    field_mapping:
+      delivery_method: "Способ передачи"  # Колонка со способом передачи
+      pickpoint_name: "Список"  # Колонка с названием пункта выдачи
+      receiver_type: "Получатель заказа"  # Колонка с типом получателя
+
+    # Настройки выходного файла
+    output:
+      filename: "Бирки.xlsx"
+      columns:
+        - client_name      # Будет сформировано из имени и фамилии
+        - pickpoint_name

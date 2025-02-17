@@ -1,0 +1,9 @@
+# Общие настройки приложения
+excel:
+  start_row: 2  # Начинаем читать со второй строки (пропускаем заголовок)
+  sheet_index: 0  # Индекс первого листа
+  use_columns: true    # Использовать буквы столбцов вместо индексов
+
+validation:
+  allow_empty_strings: false
+  trim_whitespace: true
