@@ -1,4 +1,4 @@
-"""Константы."""
+"""Константы приложения."""
 
 from enum import Enum
 from pathlib import Path
@@ -7,12 +7,12 @@ from pathlib import Path
 class DeliveryType(Enum):
     """Типы доставки."""
 
-    POSTAL = "почта"
-    OTHER = "other"
+    POSTAL = "postal"
+    PICKPOINT = "pickpoint"
 
 
 # Пути к файлам
-DEFAULT_CONFIG_PATH = Path("config/config.yaml")
+DEFAULT_CONFIG_PATH = Path("config")
 DEFAULT_OUTPUT_DIR = Path("output")
 
 # Названия выходных файлов

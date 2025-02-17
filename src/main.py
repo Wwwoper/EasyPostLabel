@@ -19,7 +19,7 @@ def main() -> None:
         config = ConfigManager()
 
         # Создаем процессор Excel и читаем данные
-        input_file = Path("files/input_file.xlsx")
+        input_file = Path("files/file_new_form.xlsx")
         if not input_file.exists():
             print(f"Ошибка: Файл {input_file} не найден")
             sys.exit(1)

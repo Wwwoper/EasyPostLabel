@@ -1,14 +1,14 @@
 """Обработчик Excel файлов."""
 
 from pathlib import Path
-from typing import Any, Set, Tuple
+from typing import Any
 
 import pandas as pd
 from openpyxl import load_workbook
 from openpyxl.cell import Cell
 
-from utils.config import ConfigManager
-from utils.utils import get_client_full_name
+from utils import ConfigManager
+from utils.constants import DeliveryType
 
 
 class ExcelProcessor:
@@ -25,12 +25,11 @@ class ExcelProcessor:
         self.config_manager = config_manager
         self.df: pd.DataFrame | None = None
 
-    def _get_cell_value(self, cell: Cell, col_config: dict[str, Any]) -> str:
+    def _get_cell_value(self, cell: Cell) -> str:
         """Получение значения ячейки с учетом её типа.
 
         Args:
             cell: Ячейка Excel
-            col_config: Конфигурация столбца
 
         Returns:
             str: Значение ячейки в виде строки
@@ -47,116 +46,122 @@ class ExcelProcessor:
 
             value = str(value).strip() if value is not None else ""
 
-        # Специальная обработка для поля "Кто будет получать заказ"
-        if col_config["source"] == "Кто будет получать заказ" and any(
-            x in str(value) for x in ["-", ":", "."]
-        ):
-            if isinstance(value, (int, float)):
-                return ""
         return str(value) if value is not None else ""
 
-    def read_data(self) -> pd.DataFrame:
-        """Чтение данных из Excel файла.
+    def _get_first_word(self, value: str) -> str:
+        """Получение первого слова из строки.
+
+        Args:
+            value: Исходная строка
 
         Returns:
-            pd.DataFrame: данные из файла
-
-        Raises:
-            FileNotFoundError: если файл не найден
-            ValueError: если формат файла некорректный
+            str: Первое слово или пустая строка
         """
-        if not self.file_path.exists():
-            raise FileNotFoundError(f"Файл не найден: {self.file_path}")
+        if not value:
+            return ""
+        return value.split()[0] if value.strip() else ""
 
+    def read_data(self) -> pd.DataFrame:
+        """Чтение данных из Excel файла с учетом конфигурации колонок."""
         try:
-            excel_config = self.config_manager.config.get("excel", {})
-            columns_config = self.config_manager.config.get("columns", {})
+            # Получаем настройки Excel
+            excel_settings = self.config_manager.settings.get_excel_settings()
+            use_columns = excel_settings.get("use_columns", True)
+            start_row = excel_settings.get("start_row", 1)
 
-            # Читаем данные через openpyxl
-            wb = load_workbook(self.file_path, data_only=True)
-            ws = wb.worksheets[excel_config.get("sheet_index", 0)]
+            # Получаем конфигурацию колонок
+            columns_config = self.config_manager.columns.get_config()
 
-            # Создаем словарь для данных
+            # Читаем файл
+            wb = load_workbook(
+                self.file_path, data_only=True
+            )  # Если файл не существует, openpyxl сам выбросит ошибку
+            ws = wb.worksheets[excel_settings.get("sheet_index", 0)]
+
+            # Читаем данные
             data = []
-
-            # Читаем данные начиная со строки start_row
-            start_row = excel_config.get("start_row", 1)
-            for row in ws.iter_rows(min_row=start_row):
+            for row in ws.iter_rows(min_row=start_row + 1):
                 row_data = {}
-                for _, col_config in columns_config.items():
-                    # Получаем значение из нужной колонки (column_index начинается с 1)
-                    cell = row[col_config["column_index"] - 1]
 
-                    # Получаем значение в зависимости от типа ячейки
-                    row_data[col_config["source"]] = self._get_cell_value(
-                        cell, col_config
-                    )
+                # Обрабатываем общие колонки
+                common_config = columns_config.get("common_columns", {})
+                if "delivery" in common_config:
+                    delivery_config = common_config["delivery"]
+                    if "method" in delivery_config:
+                        method_config = delivery_config["method"]
+                        col_letter = method_config["excel_column"]
+                        col_idx = self._get_column_index(col_letter)
+                        cell = row[col_idx]
+                        row_data["delivery.method"] = self._get_cell_value(cell)
+
+                # Обрабатываем postal_columns
+                postal_config = columns_config.get("postal_columns", {})
+                for field_name, field_config in postal_config.items():
+                    col_letter = field_config["excel_column"]
+                    col_idx = self._get_column_index(col_letter)
+                    cell = row[col_idx]
+                    row_data[f"postal.{field_name}"] = self._get_cell_value(cell)
+
+                # Обрабатываем pickpoint_columns
+                pickpoint_config = columns_config.get("pickpoint_columns", {})
+
+                # Получатель
+                if "receiver" in pickpoint_config:
+                    receiver_config = pickpoint_config["receiver"]
+                    if "type" in receiver_config:
+                        type_config = receiver_config["type"]
+                        col_letter = type_config["excel_column"]
+                        col_idx = self._get_column_index(col_letter)
+                        cell = row[col_idx]
+                        row_data["receiver.type"] = self._get_cell_value(cell)
+
+                # Данные получателя "Лично я"
+                if "self" in pickpoint_config:
+                    self_config = pickpoint_config["self"]
+                    for field, field_config in self_config.items():
+                        col_letter = field_config["excel_column"]
+                        col_idx = self._get_column_index(col_letter)
+                        cell = row[col_idx]
+                        row_data[f"self.{field}"] = self._get_cell_value(cell)
+
+                # Данные другого получателя
+                if "other" in pickpoint_config:
+                    other_config = pickpoint_config["other"]
+                    for field, field_config in other_config.items():
+                        col_letter = field_config["excel_column"]
+                        col_idx = self._get_column_index(col_letter)
+                        cell = row[col_idx]
+                        row_data[f"other.{field}"] = self._get_cell_value(cell)
+
+                # Метод доставки (с первым словом)
+                if "delivery" in pickpoint_config:
+                    delivery_config = pickpoint_config["delivery"]
+                    if "method" in delivery_config:
+                        method_config = delivery_config["method"]
+                        col_letter = method_config["excel_column"]
+                        col_idx = self._get_column_index(col_letter)
+                        cell = row[col_idx]
+                        value = self._get_cell_value(cell)
+                        if method_config.get("first_word", False):
+                            value = self._get_first_word(value)
+                        row_data["pickpoint.delivery.method"] = value
 
                 data.append(row_data)
 
-            # Создаем DataFrame из списка словарей
             self.df = pd.DataFrame(data)
-
-            # Отладочная информация
-            print("\nТипы данных столбцов:")
-            print(self.df.dtypes)
-            print("\nПервые несколько строк:")
-            print(self.df.head())
-
             return self.df
+
+        except FileNotFoundError:
+            raise FileNotFoundError(f"Файл не найден: {self.file_path}")
         except Exception as e:
             raise ValueError(f"Ошибка чтения файла: {str(e)}") from e
 
-    def process_data(self, df: pd.DataFrame | None) -> pd.DataFrame:
-        """Обработка данных из Excel файла."""
-        if df is None or df.empty:
-            return pd.DataFrame()
-
-        # Создаем множества для хранения уникальных записей
-        postal_clients_set: Set[Tuple] = set()
-        other_clients_set: Set[Tuple] = set()
-
-        # Обрабатываем каждую строку
-        for _, row in df.iterrows():
-            client_name = get_client_full_name(row, self.config_manager)
-            delivery_value = row["Список"]
-
-            # Определяем способ доставки
-            delivery = (
-                delivery_value
-                if "Почта" in delivery_value
-                else delivery_value.split()[0]
+    def _get_column_index(self, col_letter: str) -> int:
+        """Получение индекса колонки из буквенного обозначения."""
+        return (
+            sum(
+                (ord(c) - ord("A") + 1) * (26**i)
+                for i, c in enumerate(reversed(col_letter))
             )
-
-            if "Почта" in delivery_value:
-                # Преобразуем адрес и телефон в целые числа
-                postal_address = int(
-                    float(row["только Индекс отделения для получения."])
-                )
-                phone = int(float(row["Телефон"]))
-
-                # Создаем кортеж для уникальной идентификации записи
-                postal_record = (client_name, delivery, postal_address, phone)
-                postal_clients_set.add(postal_record)
-            else:
-                # Создаем кортеж для уникальной идентификации записи
-                other_record = (client_name, delivery)
-                other_clients_set.add(other_record)
-
-        # Преобразуем множества обратно в списки словарей
-        postal_clients = [
-            {
-                "ФИО": record[0],
-                "Способ доставки": record[1],
-                "Адрес": record[2],
-                "Телефон": record[3],
-            }
-            for record in postal_clients_set
-        ]
-
-        other_clients = [
-            {"ФИО": record[0], "Способ доставки": record[1]}
-            for record in other_clients_set
-        ]
-
-        return pd.DataFrame(postal_clients + other_clients)
+            - 1
+        )

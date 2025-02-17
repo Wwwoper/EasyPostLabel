@@ -4,9 +4,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, Optional, TypedDict, cast
 
-import yaml
-
-from .constants import DEFAULT_CONFIG_PATH
+from .config import ColumnsManager, SettingsManager, StrategyManager
+from .config.registry import RegistryManager
 
 
 class ExcelConfig(TypedDict):
@@ -53,24 +52,33 @@ class ReceiverType(Enum):
 class ConfigManager:
     """Менеджер конфигурации."""
 
-    def __init__(self, config_path: Optional[Path] = None) -> None:
+    def __init__(self, config_dir: Optional[Path] = None) -> None:
         """Инициализация менеджера конфигурации.
 
         Args:
-            config_path: Путь к конфигурационному файлу
+            config_dir: Путь к директории с конфигурациями
         """
-        self.config_path = config_path or DEFAULT_CONFIG_PATH
-        self.config: Dict[str, Any] = {}
-        self.load_config()
+        self.config_dir = config_dir or Path("config")
 
-    def load_config(self) -> None:
-        """Загрузка конфигурации из YAML файла."""
-        try:
-            with open(self.config_path, "r", encoding="utf-8") as f:
-                loaded_config = yaml.safe_load(f)
-                self.config = cast(Dict[str, Any], loaded_config or {})
-        except Exception as e:
-            raise ValueError(f"Ошибка загрузки конфигурации: {str(e)}") from e
+        # Инициализация менеджеров
+        self.settings = SettingsManager(self.config_dir / "settings.yaml")
+        self.columns = ColumnsManager(self.config_dir / "columns.yaml")
+        self.strategies = StrategyManager(self.config_dir / "delivery/strategies")
+        self.registry = RegistryManager(
+            self.config_dir / "delivery/strategies/registry.yaml"
+        )
+
+    def get_strategy_config(self, strategy_name: str) -> dict:
+        """Получение полной конфигурации для стратегии.
+
+        Args:
+            strategy_name: Название стратегии
+        """
+        return {
+            "settings": self.settings.get_config(),
+            "columns": self.columns.get_strategy_columns(strategy_name),
+            "strategy": self.strategies.get_strategy(strategy_name),
+        }
 
     def get_receiver_type_field(self) -> str:
         """Получение имени поля для определения типа получателя."""
@@ -120,3 +128,11 @@ class ConfigManager:
         """Получение конфигурации вывода для типа доставки."""
         output_config = self.config.get("output", {}).get(delivery_type, {})
         return cast(Dict[str, Any], output_config)
+
+    def get_registry_config(self) -> dict:
+        """Получение конфигурации реестра стратегий.
+
+        Returns:
+            dict: Конфигурация реестра стратегий
+        """
+        return self.registry.get_config()
